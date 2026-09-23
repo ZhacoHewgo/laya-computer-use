@@ -71,6 +71,21 @@ def test_a_requirement_named_by_its_field_label_needs_no_mapping_call(fake):
     assert d["choice"] == "e1" and not any(k.startswith("field_") for _s, q in fake.calls for k in q)
 
 
+def test_planner_gets_fields_without_result_or_submit_buttons(fake, monkeypatch):
+    planner = Mock(return_value=(PLAN, {}))
+    monkeypatch.setattr(laya, "plan_goal", planner)
+    p = laya.LayaPolicy("Find a stay")
+    p.choose(page(FORM), [])
+    assert planner.call_args.args[1] == ["Destination"]
+
+
+def test_clicking_generic_navigation_does_not_prove_item_opened(fake):
+    p = policy({"requirements": [], "open": "flight options", "finish": "Flight options visible."})
+    p.last = {"kind": "item", "label": "Flights", "req": None, "before": set()}
+    d = p.choose(page(FORM, title="Find Cheap Flights Worldwide & Book Your Ticket"), [])
+    assert d["operation"] != "DONE"
+
+
 def test_goal_values_are_typed_without_a_per_field_text_call(fake):
     p = policy()
     d = p.choose(page(FORM), [])
@@ -106,6 +121,39 @@ def test_item_page_title_finishes_the_goal(fake):
     p = policy({"requirements": [], "open": "Casa Flora", "finish": "Casa Flora is open."})
     d = p.choose(page(FORM, title="Casa Flora · Forma"), [])
     assert d["operation"] == "DONE" and d["choice"] == "DONE"
+
+
+def test_rules_do_not_report_model_certainty(fake):
+    d = policy().choose(page(FORM), [])
+    assert d["confidence"] is None
+    assert d["probabilities"][d["choice"]] is None
+    assert d["operation_probabilities"] == {}
+    assert d["usage"]["model_calls"] == len(fake.calls)
+
+
+def test_exhausted_requirement_blocks_instead_of_succeeding(fake):
+    p = policy()
+    p.attempts[0] = 3
+    assert p.choose(page(FORM), [])["operation"] == "BLOCKED"
+
+
+def test_unchanged_text_after_submit_is_not_result_evidence(fake):
+    p = policy({"requirements": [{"what": "Destination", "value": "Lisbon"}],
+                "open": None, "finish": "Lisbon stays are visible."})
+    history = []
+    unchanged = "Lisbon stay Alpha\nLisbon stay Beta"
+    executed(history, p.choose(page(FORM, text=unchanged), history))
+    filled = [dict(a, value="Lisbon") if a.get("node") == 1 else a for a in FORM]
+    executed(history, p.choose(page(filled, text=unchanged), history))
+    assert p.choose(page(filled, text=unchanged), history)["operation"] == "WAIT"
+    p.waits = laya.MAX_RESULT_WAITS
+    assert p.choose(page(filled, text=unchanged), history)["operation"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("requirement", [{"what": "to", "value": None}, {"what": "", "value": "London"}, 3])
+def test_malformed_requirements_cannot_be_silently_dropped(requirement):
+    with pytest.raises(ValueError, match="no valid plan"):
+        model.parse_plan({"requirements": [requirement], "finish": "Seen."}, {})
 
 
 def test_a_search_results_title_is_not_the_item_page():

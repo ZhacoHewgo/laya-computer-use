@@ -15,6 +15,11 @@ dependencies = [
 laya = "laya_ultrafast.demo:main"
 laya-computer-use = "laya_ultrafast.demo:main"
 
+[project.optional-dependencies]
+local = [
+    "mlx-lm>=0.28,<0.32",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

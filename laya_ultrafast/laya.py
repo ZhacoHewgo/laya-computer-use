@@ -261,7 +261,6 @@ class LayaPolicy:
         self.plan_meta = None
         self.fields = {}  # requirement index -> observed node
         self.met = set()
-        self.skipped = set()
         self.attempts = {}
         self.pending = None  # the latest decision, until history shows it executed
         self.last = None  # the latest executed step
@@ -275,6 +274,7 @@ class LayaPolicy:
         self.search_added = False
         self.frozen = set()  # requirements submitted to an earlier page
         self.failed = {}  # node -> decisions on it that could not execute
+        self.before_submit_lines = set()
 
     # Bookkeeping ---------------------------------------------------------------------------------------------
 
@@ -285,6 +285,8 @@ class LayaPolicy:
             self.failed[step["node"]] = self.failed.get(step["node"], 0) + 1
         if len(history) > self.seen and step and history[-1].get("choice") == step["choice"]:
             self.last = step
+            if step["kind"] == "submit":
+                self.before_submit_lines = step["visible_lines"]
             if step["req"] is not None:
                 self.attempts[step["req"]] = self.attempts.get(step["req"], 0) + 1
                 self.edit_url, self.submitted = step["url"], False
@@ -301,6 +303,7 @@ class LayaPolicy:
 
     def ask(self, state, questions):
         result = laya().system_one(state, questions)
+        self.model_calls += 1
         for key, answer in result["answers"].items():
             if questions[key]["type"] == "choice":
                 try:
@@ -341,14 +344,16 @@ class LayaPolicy:
             self.frozen |= self.met
         elements = observed(page)
         if self.plan is None:
-            labels = list(dict.fromkeys(display(e) for e in elements if plannable(e)))
+            # Action buttons are not fields. Offering them to a small planner caused invented requirements.
+            labels = list(dict.fromkeys(display(e) for e in elements if is_field(e)))
             self.plan, self.plan_meta = plan_goal(self.goal, labels)
         self.answers, self.questions, self.tokens = {}, {}, 0
+        self.model_calls = 0
         op, element, action, picked, kind, req, text = self.decide(page, elements)
         answer = picked[1] if picked else None
         indices = {str(e["node"]): e["index"] for e in elements}
         choice = action["id"] if action else {"DONE": "DONE", "BLOCKED": "BLOCKED"}.get(op, "wait")
-        probability = answer["probabilities"][answer["choice"]] if answer else 1.0
+        probability = answer["probabilities"][answer["choice"]] if answer else None
         target = element["index"] if element else None
         if action and action["kind"] == "select":
             target = f"{element['index']}:{element['options'].index(action) + 1}"
@@ -356,22 +361,24 @@ class LayaPolicy:
             "choice": choice, "kind": kind, "req": req, "node": element["node"] if element else None,
             "url": page["url"], "before": {e["node"] for e in elements},
             "label": element["label"] if element else None,
+            "visible_lines": {line.strip() for line in page["text"].splitlines()},
         }
         return {
             "choice": choice,
             "operation": op,
             "target": target,
             "text": text,
-            "confidence": answer["confidence"] if answer else 1.0,
+            "confidence": answer["confidence"] if answer else None,
+            "target_source": "laya" if answer else "rule",
             "probabilities": {choice: probability},
-            "operation_probabilities": {op: probability},
+            "operation_probabilities": {},  # Rules compose operations; target scores are not operation scores.
             "target_probabilities": {
                 indices.get(k, k): p for k, p in (answer or {}).get("probabilities", {}).items() if k in indices
             },
             "target_confidence": answer["confidence"] if answer and element else None,
             "raw_answers": self.answers,
             "model": os.environ.get("LAYA_MODEL", DEFAULT_MODEL),
-            "usage": {"input_tokens": self.tokens, "output_tokens": 0},
+            "usage": {"input_tokens": self.tokens, "output_tokens": 0, "model_calls": self.model_calls},
             "latency_ms": round((time.perf_counter() - started) * 1000),
             "request": {"plan": self.plan, "questions": self.questions},
         }
@@ -410,11 +417,10 @@ class LayaPolicy:
             return "WAIT", None, None, None, "wait", None, None
         self.refresh(page, elements, by_node)
         for i, r in enumerate(reqs):
-            if i in self.met or i in self.skipped:
+            if i in self.met:
                 continue
             if self.attempts.get(i, 0) >= 3:
-                self.skipped.add(i)
-                continue
+                return "BLOCKED", None, None, None, "blocked", i, None
             e = by_node.get(self.fields.get(i))
             state = f"Requirement: {r['what']} = {r['value']}"
             if e is None:
@@ -433,7 +439,7 @@ class LayaPolicy:
                 picked = self.pick(f"set_{i}", options, state, f"Which element sets {r['what']} to {r['value']}?",
                                    about, allow_none=True)
                 if not picked:
-                    # Often the page is mid-render. Wait (one attempt); the attempt limit skips it for good.
+                    # Often the page is mid-render. Wait once; exhausted requirements stop the run.
                     return "WAIT", None, None, None, "wait", i, None
                 # It may open a picker (a trip-type menu, a calendar); step 1 then chooses from what appears.
                 return self.click(picked, "open", i)
@@ -459,7 +465,9 @@ class LayaPolicy:
         if item:
             # An opened item names its page. Accept its title when it carries the item's words, or the words
             # of the element Laya chose to open it.
-            chosen = (last and last["kind"] == "item" and relevance({"label": last["label"], "current": ""}, item)
+            item_words = words(item)
+            chosen = (last and last["kind"] == "item" and item_words
+                      and len(words(last["label"]) & item_words) >= min(2, len(item_words))
                       and titled(page["title"], last["label"]))
             if chosen or titled(page["title"], item):
                 return "DONE", None, None, None, "done", None, None
@@ -474,25 +482,26 @@ class LayaPolicy:
             # accept it once Laya sees results, and wait while they load.
             # Modern search pages often update results in place without changing host or path. A recorded
             # submit plus still-satisfied requirements is enough to evaluate the visible result evidence.
-            searched = self.acted == "submit" and self.submitted and self.met | self.skipped >= set(range(len(reqs)))
+            searched = self.acted == "submit" and self.submitted and self.met >= set(range(len(reqs)))
             # Laya rarely labels a real results page as one, so also count visible result evidence that names
             # the requested values: two or more lines or elements mentioning at least three of them.
             wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
-            matching = [e for e in clickable if len(words(e["label"]) & wanted) >= min(3, len(wanted))]
+            matching = [e for e in clickable if wanted and e["node"] not in (last or {}).get("before", set())
+                        and len(words(e["label"]) & wanted) >= min(3, len(wanted))]
             matching_lines = [
                 line for line in page["text"].splitlines()
-                if len(words(line) & wanted) >= min(3, len(wanted))
+                if wanted and line.strip() not in self.before_submit_lines
+                and len(words(line) & wanted) >= min(3, len(wanted))
             ]
-            # Laya called a loading results skeleton "finish", so with stated values it needs rows naming them,
-            # or its verdict after the full wait for results.
-            laya_done = done["choice"] in {"finish", "results"}
+            # A model verdict alone cannot prove that submission produced any results.
             if (not reqs and done["choice"] == "finish") or (
-                searched and (max(len(matching), len(matching_lines)) >= 2 or
-                              (laya_done and self.waits >= MAX_RESULT_WAITS))
+                searched and max(len(matching), len(matching_lines)) >= 2
             ):
                 return "DONE", None, None, None, "done", None, None
             if searched and self.waits < MAX_RESULT_WAITS:
                 return "WAIT", None, None, None, "wait", None, None
+            if searched:
+                return "BLOCKED", None, None, None, "blocked", None, None
         if last and last["kind"] in {"submit", "item", "next"} and self.waits < 2 and (self.submitted or navigated):
             return "WAIT", None, None, None, "wait", None, None
         mapped = {self.fields.get(i) for i in range(len(reqs))}
@@ -573,7 +582,7 @@ class LayaPolicy:
     def refresh(self, page, elements, by_node):
         """Map unmapped requirements to observed elements, then check their current values."""
         reqs = self.plan["requirements"]
-        open_reqs = [i for i in range(len(reqs)) if i not in self.skipped and i not in self.frozen]
+        open_reqs = [i for i in range(len(reqs)) if i not in self.frozen]
         fields = [e for e in elements if is_field(e)]
         # One field holds one requirement. Fields kept by other requirements are not offered again.
         taken = {self.fields.get(i) for i in open_reqs if self.fields.get(i) in by_node}

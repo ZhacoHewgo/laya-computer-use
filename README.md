@@ -14,8 +14,8 @@ This repository continues the work in [ipenywis/laya-ultrafast](https://github.c
 
 jev-ultrafast asks [TypeSafe's Jev](https://docs.typesafe.ai/introduction), a hosted model, to choose each browser action. This port replaces that API call with **Laya**, an open-weight typed-decision model that runs on your Mac:
 
-- **No decision API and no per-step cost.** Each decision is a local forward pass. The median is about 33 ms on an M1 Max.
-- **One text-model call per task.** An OpenAI-compatible model (OpenRouter by default, or a local server such as Ollama) turns the goal into field values, the item to open, and a finish condition. If you use a local text model, the whole agent runs offline, apart from the websites it browses.
+- **No decision API charge.** Laya inference runs on your Mac. One browser step can use several model calls plus rules; step time is not a single forward-pass benchmark.
+- **One planning stage per task.** An OpenAI-compatible model (OpenRouter by default, or a local server) turns the goal into field values, the item to open, and a finish condition. Invalid plans may trigger up to three calls. With a local planner and downloaded weights, inference needs no cloud API.
 - **A different policy.** Laya answers narrow questions well: which field is the destination, whether `Tue, Oct 20` matches `October 20, 2026`, which suggestion is London. It does not reliably answer the open question "what should the browser do next?". So [`laya_ultrafast/laya.py`](laya_ultrafast/laya.py) combines narrow Laya questions with rules that apply on any site:
   1. Fill the values the goal states. Laya maps each one to a field, and Laya or plain code checks it.
   2. After typing or opening a control, choose from the options that appeared.
@@ -60,7 +60,22 @@ uv run laya
 
 Open **http://127.0.0.1:8766**, choose a scenario, and click **Start demo → Run automatically**.
 
-For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. Its default goal searches a generated local page and never logs in, purchases, or sends data elsewhere. A text planner is still required once per task; point `TEXT_MODEL_BASE_URL` at a local OpenAI-compatible server for an offline run.
+For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. The fixture generates fictional results without login or purchases. A remote text planner would receive the task and field labels; use the local setup below to keep inference on your Mac.
+
+### Fully local visible demo / 完全本地演示
+
+```bash
+uv sync --extra local
+uv run --extra local hf download aac6fef/laya-multilingual-mlx
+uv run --extra local hf download mlx-community/Qwen3-1.7B-4bit
+uv run --extra local python examples/local_demo.py
+```
+
+Open **http://127.0.0.1:8770**, then **Start demo → Run automatically**. The launcher starts an isolated Chrome profile, a loopback-only MLX planner, and the inspector. The inspector shows live screenshots of the browser being controlled. Press Ctrl+C in the launcher terminal to stop its three services. Chrome must be installed in `/Applications`.
+
+The launcher uses cached weights only and overrides cloud settings. Ports default to `8770` (inspector), `8771` (planner), and `9334` (test browser); change them with `--port`, `--planner-port`, and `--browser-port`. Use `--laya aac6fef/laya-typed-decisions-mlx` to compare the English typed-decisions checkpoint after downloading it.
+
+Qwen supplies field values; Laya answers constrained selection questions; rules compose the next operation. The trace reports real Laya call counts and leaves rule probabilities empty. A score is not a task success rate. This is a DOM-based browser demo, not screenshot understanding or general desktop control.
 
 Chrome connects through [Browser Harness](https://github.com/browser-use/browser-harness), just as in jev-ultrafast. Enable remote debugging at `chrome://inspect/#remote-debugging`, and run `uv run browser-harness --doctor` if the connection fails.
 
@@ -96,9 +111,11 @@ Flight sites only offer future dates, so pass `--date`. It defaults to 30 days a
 
 **Skyscanner** may show an "Are you a person or a robot?" check, especially to automated or headless browsers. The agent does not try to get past it. Run it in your everyday Chrome and solve the check yourself if it appears. Skyscanner also ticks "Add a place to stay" by default, so its goal says "without adding a place to stay".
 
-## Measurements
+## Upstream measurements (not re-measured results for this fork)
 
-These were measured on an M1 Max with `inception/mercury-2.5` on OpenRouter as the text model. Timing includes the planning call (~1–1.5 s):
+For this fork's actual Apple M4 + local Qwen + multilingual Laya results, see [本地验证记录](docs/local-validation.md). Three local fixtures passed independent checks; Wikipedia and Google Flights did not pass in the final run.
+
+The following numbers are retained from [ipenywis/laya-ultrafast](https://github.com/ipenywis/laya-ultrafast). They report an M1 Max with `inception/mercury-2.5` on OpenRouter. They do not measure this fork's Qwen or multilingual configuration:
 
 | Task | Result | Time |
 | --- | --- | --- |

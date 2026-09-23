@@ -10,10 +10,10 @@
       header { padding: 24px 8vw; color: white; background: #2457d6; }
       header strong { font-size: 24px; }
       header span { margin-left: 14px; opacity: .75; }
-      main { max-width: 980px; margin: 44px auto; padding: 0 24px; }
+      main { max-width: 980px; margin: 24px auto; padding: 0 24px; }
       h1 { margin: 0 0 8px; font-size: 32px; }
       .intro { color: #667085; margin-bottom: 24px; }
-      form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; padding: 26px; background: white; border: 1px solid #e4e8f0; border-radius: 16px; box-shadow: 0 12px 35px #16346a12; }
+      form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 18px; background: white; border: 1px solid #e4e8f0; border-radius: 16px; box-shadow: 0 12px 35px #16346a12; }
       label { display: grid; gap: 8px; font-size: 14px; color: #475467; }
       input, select, button { min-height: 46px; border: 1px solid #cfd6e4; border-radius: 9px; padding: 0 13px; font: inherit; }
       input:focus, select:focus { outline: 3px solid #2457d624; border-color: #2457d6; }
@@ -50,6 +50,8 @@
     <script>
       const form = document.getElementById("search-form");
       const results = document.getElementById("results");
+      const escape = value => String(value).replace(/[&<>"']/g, c =>
+        ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const from = document.getElementById("from").value.trim() || "未填写";
@@ -64,9 +66,9 @@
           ["G7398", "14:06", "15:58", "¥159"],
         ];
         results.innerHTML = rows.map(([train, start, end, price]) => `
-          <article class="result" aria-label="${from}到${to} ${train}">
-            <div><div class="route">${from} ${start} → ${to} ${end}</div>
-            <div class="meta">${date} · ${trip} · ${direct ? "直达" : "包含中转"} · ${train}</div></div>
+          <article class="result" aria-label="${escape(from)}到${escape(to)} ${train}">
+            <div><div class="route">${escape(from)} ${start} → ${escape(to)} ${end}</div>
+            <div class="meta">${escape(date)} · ${escape(trip)} · ${direct ? "直达" : "包含中转"} · ${train}</div></div>
             <div class="price">${price}</div>
           </article>`).join("");
       });

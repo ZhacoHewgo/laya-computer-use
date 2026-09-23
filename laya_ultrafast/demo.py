@@ -150,7 +150,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global PORT, ORIGIN
     load_environment()
+    PORT = int(os.environ.get("TYPESAFE_DEMO_PORT", "8766"))
+    ORIGIN = f"http://127.0.0.1:{PORT}"
     atexit.register(close_browser)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Laya Computer Use: {ORIGIN}", flush=True)

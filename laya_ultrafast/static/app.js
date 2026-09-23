@@ -20,7 +20,7 @@ const escape = (value) =>
         c
       ],
   );
-const percent = (value) => `${(value * 100).toFixed(value < 0.01 ? 1 : 0)}%`;
+const percent = (value) => value == null ? "规则" : `${(value * 100).toFixed(value < 0.01 ? 1 : 0)}%`;
 async function call(name, body = {}) {
   const response = await fetch(`/api/${name}`, {
     method: "POST",
@@ -108,7 +108,8 @@ function render() {
   $("latency").textContent = d ? `${d.latency_ms} ms` : "—";
   $("confidence").textContent = d?.target_confidence != null ? percent(d.target_confidence) : "—";
   $("completion").textContent = d ? d.operation : "—";
-  $("ranking-note").textContent = d ? "Ranked by the decision policy" : "Unranked";
+  $("ranking-note").textContent = !d ? "Unranked" :
+    d.target_source === "rule" ? "规则选择 · 无模型概率" : "Laya 候选评分 · 不代表成功率";
   const op = Object.entries(d?.operation_probabilities || {}).sort((a,b)=>b[1]-a[1]);
   $("operation-choices").innerHTML = op.map(([name,p]) =>
     `<span class="operation-choice ${name === d.operation ? 'best' : ''}">${escape(name)} <b>${percent(p)}</b></span>`).join('');
@@ -136,7 +137,10 @@ function render() {
         )
         .join("")
     : '<p class="muted">Each executed action leaves an observed result.</p>';
-  $("step-count").textContent = `${state.history.length} actions · ${(state.elapsed_ms / 1000).toFixed(2)} s`;
+  const layaCalls = (state.decisions || []).reduce((n, d) => n + (d.usage?.model_calls || 0), 0);
+  const textCalls = (state.text_calls || []).reduce((n, d) => n + (d.model_calls || 1), 0);
+  $("step-count").textContent = `${state.history.length} actions · ${(state.elapsed_ms / 1000).toFixed(2)} s` +
+    ` · Laya ${layaCalls} calls · Text ${textCalls} calls`;
   $("model-state").textContent = JSON.stringify(
     d?.request || {
       goal: state.goal,

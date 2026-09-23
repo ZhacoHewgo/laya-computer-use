@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="demo-token" content="__TOKEN__" />
     <title>Laya Computer Use</title>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -21,8 +20,8 @@
           <p class="eyebrow">A BROWSER THAT CHOOSES</p>
           <h1>Every page is a set of possibilities.</h1>
           <p>
-            A local Laya model picks the next action. A small language model handles the words.
-            <a href="/demo.mp4" target="_blank" rel="noopener">Watch the real Google Flights run ↗</a>
+            文本模型整理任务，Laya 为候选元素评分，程序规则组合并执行操作。
+            <a href="/demo.mp4" target="_blank" rel="noopener">上游 Google Flights 演示录像 ↗</a>
           </p>
         </div>
         <div class="model-tag"><span id="decision-model">laya</span> <span>+ text helper</span></div>
@@ -35,12 +34,12 @@
             <option value="skyscanner">Skyscanner · real web</option>
             <option value="travel">Travel planner · fixture</option>
             <option value="research">Reading room · fixture</option>
-            <option value="zh-travel">中文车票搜索 · 本地测试页</option>
+            <option value="zh-travel" selected>中文车票搜索 · 本地测试页</option>
           </select>
         </div>
         <div class="task-row">
           <textarea id="goal" name="goal" rows="5">
-Find one-way flights from Zurich to London on September 20, 2026, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight.</textarea
+查找2026年10月20日从杭州到上海的单程车票，只看直达。看到匹配车次后停止，不要购买。</textarea
           ><button type="submit" id="start" class="primary">
             Start demo <span>↗</span>
           </button>

@@ -187,7 +187,8 @@ def chat_json(system, context):
             "temperature": 0,
             "response_format": {"type": "json_object"},
             **reasoning,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(context)}],
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
         },
     )
     output = json.loads(result["choices"][0]["message"]["content"])
@@ -217,7 +218,8 @@ def plan_goal(goal, fields=(), attempts=3):
     context = {"goal": goal, "fields_on_page": list(fields)[:40]}
     for attempt in range(attempts):
         try:
-            return parse_plan(*chat_json(GOAL_PLAN, context))
+            plan, meta = parse_plan(*chat_json(GOAL_PLAN, context))
+            return plan, {**meta, "model_calls": attempt + 1}
         except ValueError as error:
             if "TEXT_MODEL_API_KEY" in str(error) or attempt == attempts - 1:
                 raise
@@ -225,15 +227,23 @@ def plan_goal(goal, fields=(), attempts=3):
 
 def parse_plan(output, meta):
     try:
+        raw = output["requirements"]
+        if not isinstance(raw, list) or any(
+            not isinstance(r, dict) or set(r) != {"what", "value"}
+            or not all(isinstance(r[k], str) and r[k].strip() for k in ("what", "value"))
+            for r in raw
+        ):
+            raise ValueError()
         requirements = [
             {"what": r["what"].strip(), "value": r["value"].strip()}
-            for r in output["requirements"]
-            if isinstance(r.get("what"), str) and isinstance(r.get("value"), str) and r["value"].strip()
+            for r in raw
         ]
         finish, item = output["finish"], output.get("open")
         if not isinstance(finish, str) or not finish.strip() or len(requirements) > 12:
             raise ValueError()
-        item = item.strip() if isinstance(item, str) and item.strip() else None
+        if item is not None and (not isinstance(item, str) or not item.strip()):
+            raise ValueError()
+        item = item.strip() if item is not None else None
     except (ValueError, KeyError, TypeError, AttributeError):
         raise ValueError("Goal planner returned no valid plan; no action executed.") from None
     return {"requirements": requirements, "open": item, "finish": finish.strip()}, meta
