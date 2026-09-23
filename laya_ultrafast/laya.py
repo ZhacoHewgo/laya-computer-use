@@ -19,12 +19,22 @@ DEFAULT_MODEL = "aac6fef/laya-typed-decisions-mlx"
 FIELD_ROLES = {"combobox", "textbox", "searchbox", "spinbutton", "checkbox", "radio", "switch"}
 TOGGLES = {"checkbox", "radio", "switch"}
 NEGATIVE = {"no", "off", "false", "unchecked", "disabled", "without", "none"}
+NEGATIVE_CJK = {"关闭", "未选", "禁用", "无需", "无须", "不要", "不需要", "不启用", "不勾选"}
 SUBMIT_WORDS = {"search", "submit", "find", "go", "apply", "done", "continue", "next", "confirm", "show"}
+SUBMIT_CJK = {"搜索", "提交", "查找", "查询", "应用", "完成", "继续", "下一步", "确认", "显示"}
+SEARCH_CJK = {"搜索", "查找", "查询"}
 STOP_WORDS = {"the", "and", "for", "with", "from", "find", "open", "stop", "when", "visib", "page", "are", "this"}
+CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+")
 MONTH_DAY = re.compile(
     r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(?:uary|ruary|ch|il|e|y|ust|t|tember|ober|ember)?"
     r"\s+(\d{1,2})\b|\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"
 )
+CHINESE_DATE = re.compile(r"(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?")
+NUMERIC_DATE = re.compile(r"(?:\d{4}\s*[-/.]\s*)?(\d{1,2})\s*[-/.]\s*(\d{1,2})")
+MONTHS = {name: i for i, name in enumerate(
+    ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1
+)}
+RESULT_TITLE_MARKERS = {"search results", "搜索结果", "查询结果"}
 YES_NO = {"yes": "the current value satisfies the requirement", "no": "the current value does not satisfy it"}
 # Contrasting page kinds separated finished from unfinished pages far better than a yes/no question.
 UNFINISHED = {
@@ -50,17 +60,62 @@ def laya():
 
 
 def fold(text):
-    text = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().lower()
-    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+    """Case-fold text while preserving CJK and de-accenting Latin characters."""
+    result = []
+    for char in unicodedata.normalize("NFKC", str(text)).lower():
+        if char.isascii():
+            result.append(char if char.isalnum() else " ")
+            continue
+        ascii_base = "".join(
+            part for part in unicodedata.normalize("NFKD", char)
+            if part.isascii() and part.isalnum()
+        )
+        if ascii_base:
+            result.append(ascii_base.lower())
+        else:
+            result.append(char if char.isalnum() else " ")
+    return re.sub(r"\s+", " ", "".join(result)).strip()
 
 
 def words(text):
-    return {w[:5] for w in fold(text).split() if (len(w) > 2 or w.isdigit()) and w[:5] not in STOP_WORDS}
+    result = set()
+    for token in fold(text).split():
+        runs = CJK_RUN.findall(token)
+        for run in runs:
+            result.add(run)
+            result.update(run[i:i + 2] for i in range(max(1, len(run) - 1)))
+        latin = CJK_RUN.sub(" ", token)
+        for part in latin.split():
+            stem = part[:5]
+            if (len(part) > 2 or part.isdigit()) and stem not in STOP_WORDS:
+                result.add(stem)
+    return result
 
 
 def month_day(text):
     m = MONTH_DAY.search(fold(text))
-    return (m[1] or m[4], int(m[2] or m[3])) if m else None
+    if m:
+        return MONTHS[(m[1] or m[4])[:3]], int(m[2] or m[3])
+    m = CHINESE_DATE.search(str(text))
+    if m:
+        return int(m[2]), int(m[3])
+    m = NUMERIC_DATE.search(str(text))
+    return (int(m[1]), int(m[2])) if m else None
+
+
+def is_negative(text):
+    value = fold(text)
+    return bool(set(value.split()) & NEGATIVE) or any(word in value for word in NEGATIVE_CJK)
+
+
+def is_submit_label(text):
+    value = fold(text)
+    return bool(set(value.split()) & SUBMIT_WORDS) or any(word in value for word in SUBMIT_CJK)
+
+
+def is_search_label(text):
+    value = fold(text)
+    return "searc" in words(value) or any(word in value for word in SEARCH_CJK)
 
 
 def observed(page):
@@ -133,7 +188,7 @@ def settled(requirement, e):
     """True or False when plain code can tell; None asks Laya."""
     value = requirement["value"]
     if e["role"] in TOGGLES:
-        return (e["current"] == "checked") != bool(set(fold(value).split()) & NEGATIVE)
+        return (e["current"] == "checked") != is_negative(value)
     current = e["current"]
     if not fold(current):
         return False
@@ -172,6 +227,11 @@ def location(url):
 def titled(title, name):
     """The page title carries most of the name's words, and they make up most of the title. A search results
     page ("X - Search results - Site") names the item too, but is not its page."""
+    folded_title, folded_name = fold(title), fold(name)
+    if any(marker in folded_title for marker in RESULT_TITLE_MARKERS):
+        return False
+    if folded_name and folded_name in folded_title:
+        return True
     wanted, shown = words(name), words(title)
     shared = len(wanted & shown)
     return bool(wanted) and shared >= max(1, round(0.6 * len(wanted))) and shared >= 0.6 * len(shown)
@@ -339,7 +399,7 @@ class LayaPolicy:
         item = self.plan.get("open")
         if item and not self.search_added and not titled(page["title"], item):
             search = [e for e in elements if "fill" in e["actions"] and
-                      (e["role"] == "searchbox" or "searc" in words(e["label"]))]
+                      (e["role"] == "searchbox" or is_search_label(e["label"]))]
             if search and not any(relevance(e, item) for e in clickable):
                 reqs.append({"what": "search", "value": item})
                 self.search_added = True
@@ -412,16 +472,23 @@ class LayaPolicy:
             }})["done"]
             # A submit that led to a new page while every stated value still holds is a search outcome:
             # accept it once Laya sees results, and wait while they load.
-            searched = self.acted == "submit" and navigated and self.met | self.skipped >= set(range(len(reqs)))
-            # Laya rarely labels a real results page as one, so also count results that name the requested
-            # values: two or more elements mentioning at least three of them (route, date, ...).
+            # Modern search pages often update results in place without changing host or path. A recorded
+            # submit plus still-satisfied requirements is enough to evaluate the visible result evidence.
+            searched = self.acted == "submit" and self.submitted and self.met | self.skipped >= set(range(len(reqs)))
+            # Laya rarely labels a real results page as one, so also count visible result evidence that names
+            # the requested values: two or more lines or elements mentioning at least three of them.
             wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
             matching = [e for e in clickable if len(words(e["label"]) & wanted) >= min(3, len(wanted))]
+            matching_lines = [
+                line for line in page["text"].splitlines()
+                if len(words(line) & wanted) >= min(3, len(wanted))
+            ]
             # Laya called a loading results skeleton "finish", so with stated values it needs rows naming them,
             # or its verdict after the full wait for results.
             laya_done = done["choice"] in {"finish", "results"}
             if (not reqs and done["choice"] == "finish") or (
-                searched and (len(matching) >= 2 or (laya_done and self.waits >= MAX_RESULT_WAITS))
+                searched and (max(len(matching), len(matching_lines)) >= 2 or
+                              (laya_done and self.waits >= MAX_RESULT_WAITS))
             ):
                 return "DONE", None, None, None, "done", None, None
             if searched and self.waits < MAX_RESULT_WAITS:
@@ -434,7 +501,7 @@ class LayaPolicy:
         candidates = [e for e in clickable if e["node"] not in mapped and self.tried.get(e["label"], 0) < 2]
 
         def submits(e):
-            return 2 * bool(set(fold(e["label"]).split()) & SUBMIT_WORDS) + (e["node"] in fresh)
+            return 2 * is_submit_label(e["label"]) + (e["node"] in fresh)
 
         state = f"Goal: {self.goal}\nFinish condition: {finish}\nPage title: {page['title']}\nPage: {page['text']}"
         if self.typed:

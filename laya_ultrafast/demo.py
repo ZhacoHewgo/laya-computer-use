@@ -23,6 +23,11 @@ WEB = {
     "flights": "https://www.google.com/travel/flights?hl=en",
     "skyscanner": "https://www.skyscanner.net/",
 }
+FIXTURES = {
+    "travel": "/fixture.html?scenario=travel",
+    "research": "/fixture.html?scenario=research",
+    "zh-travel": "/fixture-zh.html",
+}
 AGENT = None
 
 
@@ -61,14 +66,15 @@ def command(name, body):
     global AGENT
     if name == "reset":
         scenario = body.get("scenario", "flights")
-        if scenario not in {"travel", "research", *WEB}:
+        if scenario not in {*FIXTURES, *WEB}:
             raise ValueError("Unknown demo scenario")
         goal = body.get("goal", "").strip()
         if not goal or len(goal) > 2000:
             raise ValueError("Enter 1–2,000 characters")
         close_browser()
+        url = WEB[scenario] if scenario in WEB else ORIGIN + FIXTURES[scenario]
         AGENT = Agent(
-            WEB.get(scenario, f"{ORIGIN}/fixture.html?scenario={scenario}"),
+            url,
             goal,
             screenshots=True,
             record_dir=Path.cwd() / "artifacts" / "frames" if body.get("record") else None,
@@ -108,6 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             "/app.js": ("app.js", "text/javascript"),
             "/style.css": ("style.css", "text/css"),
             "/fixture.html": ("fixture.html", "text/html"),
+            "/fixture-zh.html": ("fixture-zh.html", "text/html"),
         }
         if path not in files:
             return self.send(404, "Not found", "text/plain")
@@ -146,7 +153,7 @@ def main():
     load_environment()
     atexit.register(close_browser)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Laya Ultrafast: {ORIGIN}", flush=True)
+    print(f"Laya Computer Use: {ORIGIN}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

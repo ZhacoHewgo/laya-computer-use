@@ -234,22 +234,7 @@ wheels = [
 ]
 
 [[package]]
-name = "laya-mlx"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "huggingface-hub" },
-    { name = "mlx", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "numpy" },
-    { name = "tokenizers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/88/18/56a244e4196db45b63fe51a42ee31480db97f8d2f3810b546fbac42f2bac/laya_mlx-0.1.0.tar.gz", hash = "sha256:856a9e23d5c6f26e6e845d2c25dd9a75039086bb9b58fda2fbcaf6509b727da7", size = 46923, upload-time = "2026-09-19T16:36:27.43Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/92/f7e7d6ee9e67041f576eacea7b2d0060f508a9e8e28075f4bdd657a9bb1d/laya_mlx-0.1.0-py3-none-any.whl", hash = "sha256:50f29ddcd6c9e71fd18a4c284695f18c2e560c803a099c5f6870c2dc5c037189", size = 56200, upload-time = "2026-09-19T16:36:24.653Z" },
-]
-
-[[package]]
-name = "laya-ultrafast"
+name = "laya-computer-use"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -269,7 +254,7 @@ dev = [
 requires-dist = [
     { name = "browser-harness", specifier = "==0.1.13" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.28,<1" },
-    { name = "laya-mlx", specifier = ">=0.1,<0.2" },
+    { name = "laya-mlx", specifier = ">=0.2,<0.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -277,6 +262,21 @@ dev = [
     { name = "pillow", specifier = ">=11,<13" },
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "ruff", specifier = ">=0.14,<1" },
+]
+
+[[package]]
+name = "laya-mlx"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "mlx", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy" },
+    { name = "tokenizers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/4c/2b67e41023ee51bf06af9ac4fb4a2b2e015cc3e8af7d779a989fb2332991/laya_mlx-0.2.0.tar.gz", hash = "sha256:d51c2366c3bbccaa1aee87862728b9b51704547ffce5027de37e44756fbf8251", size = 53854, upload-time = "2026-09-22T06:02:22.566Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/21/89b7f030fcbfb6327f1fc553480fbeaa2aae7408338ee422c2cf37746e66/laya_mlx-0.2.0-py3-none-any.whl", hash = "sha256:1a80a0cc79c55be808de0b1208a172566209b5780d796b98d86235e9cf335187", size = 63524, upload-time = "2026-09-22T06:02:20.61Z" },
 ]
 
 [[package]]

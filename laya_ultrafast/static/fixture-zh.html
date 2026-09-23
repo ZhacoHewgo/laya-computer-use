@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>本地车票搜索</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 16px system-ui, sans-serif; color: #1f2937; background: #f5f7fb; }
+      header { padding: 24px 8vw; color: white; background: #2457d6; }
+      header strong { font-size: 24px; }
+      header span { margin-left: 14px; opacity: .75; }
+      main { max-width: 980px; margin: 44px auto; padding: 0 24px; }
+      h1 { margin: 0 0 8px; font-size: 32px; }
+      .intro { color: #667085; margin-bottom: 24px; }
+      form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; padding: 26px; background: white; border: 1px solid #e4e8f0; border-radius: 16px; box-shadow: 0 12px 35px #16346a12; }
+      label { display: grid; gap: 8px; font-size: 14px; color: #475467; }
+      input, select, button { min-height: 46px; border: 1px solid #cfd6e4; border-radius: 9px; padding: 0 13px; font: inherit; }
+      input:focus, select:focus { outline: 3px solid #2457d624; border-color: #2457d6; }
+      .wide { grid-column: 1 / -1; }
+      .check { display: flex; align-items: center; gap: 9px; }
+      .check input { min-height: auto; width: 18px; height: 18px; }
+      button { border: 0; color: white; background: #2457d6; cursor: pointer; font-weight: 650; }
+      button:hover { background: #1947bd; }
+      #results { margin-top: 28px; display: grid; gap: 14px; }
+      .empty { padding: 34px; text-align: center; color: #7b8495; border: 1px dashed #c8d0df; border-radius: 13px; }
+      .result { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 20px; background: white; border: 1px solid #e0e5ef; border-radius: 13px; }
+      .route { font-size: 20px; font-weight: 700; }
+      .meta { margin-top: 7px; color: #667085; }
+      .price { color: #d64d24; font-size: 21px; font-weight: 750; }
+      footer { margin-top: 32px; color: #98a2b3; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header><strong>行迹</strong><span>本地中文 computer-use 测试页</span></header>
+    <main>
+      <h1>查找车票</h1>
+      <p class="intro">这是本地演示，不会登录、下单或产生费用。</p>
+      <form id="search-form">
+        <label>出发地<input id="from" name="from" type="text" aria-label="出发地" autocomplete="off" /></label>
+        <label>目的地<input id="to" name="to" type="text" aria-label="目的地" autocomplete="off" /></label>
+        <label>出发日期<input id="date" name="date" type="text" aria-label="出发日期" placeholder="例如：2026年10月20日" autocomplete="off" /></label>
+        <label>行程类型<select id="trip" name="trip" aria-label="行程类型"><option>往返</option><option>单程</option></select></label>
+        <label class="check wide"><input id="direct" name="direct" type="checkbox" />仅看直达</label>
+        <button class="wide" type="submit">搜索车次</button>
+      </form>
+      <section id="results" aria-live="polite"><div class="empty">填写条件并搜索后，这里会显示匹配车次。</div></section>
+      <footer>所有数据均为本地生成的演示内容。</footer>
+    </main>
+    <script>
+      const form = document.getElementById("search-form");
+      const results = document.getElementById("results");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const from = document.getElementById("from").value.trim() || "未填写";
+        const to = document.getElementById("to").value.trim() || "未填写";
+        const date = document.getElementById("date").value.trim() || "日期未填写";
+        const trip = document.getElementById("trip").value;
+        const direct = document.getElementById("direct").checked;
+        document.title = `${from}到${to}车票 · 本地演示`;
+        const rows = [
+          ["G7312", "08:15", "10:02", "¥168"],
+          ["G7546", "10:44", "12:31", "¥176"],
+          ["G7398", "14:06", "15:58", "¥159"],
+        ];
+        results.innerHTML = rows.map(([train, start, end, price]) => `
+          <article class="result" aria-label="${from}到${to} ${train}">
+            <div><div class="route">${from} ${start} → ${to} ${end}</div>
+            <div class="meta">${date} · ${trip} · ${direct ? "直达" : "包含中转"} · ${train}</div></div>
+            <div class="price">${price}</div>
+          </article>`).join("");
+      });
+    </script>
+  </body>
+</html>

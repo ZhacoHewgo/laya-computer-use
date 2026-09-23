@@ -1,22 +1,26 @@
 [project]
-name = "laya-ultrafast"
+name = "laya-computer-use"
 version = "0.1.0"
-description = "A local browser agent that chooses instead of generating: open-weight Laya decisions on Apple Silicon."
+description = "A Unicode-aware local browser agent powered by Laya decisions on Apple Silicon."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "browser-harness==0.1.13",
     "httpx[http2]>=0.28,<1",
-    "laya-mlx>=0.1,<0.2",
+    "laya-mlx>=0.2,<0.3",
 ]
 
 [project.scripts]
 laya = "laya_ultrafast.demo:main"
+laya-computer-use = "laya_ultrafast.demo:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["laya_ultrafast"]
 
 [dependency-groups]
 dev = ["pytest>=8.4,<9", "ruff>=0.14,<1", "pillow>=11,<13"]

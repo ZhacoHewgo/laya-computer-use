@@ -86,6 +86,22 @@ def test_typed_text_is_submitted_before_opening_a_result(fake):
     assert (d["operation"], d["choice"]) == ("CLICK", "e3")  # Find stays, not View Casa Flora
 
 
+def test_same_page_search_can_finish_from_visible_results(fake):
+    p, history = policy({
+        "requirements": [{"what": "Destination", "value": "Lisbon"}],
+        "open": None,
+        "finish": "Lisbon stays are visible.",
+    }), []
+    first = p.choose(page(FORM), history)
+    executed(history, first)
+    filled = [dict(a, value="Lisbon") if a.get("node") == 1 else a for a in FORM]
+    submit = p.choose(page(filled), history)
+    assert submit["choice"] == "e3"
+    executed(history, submit)
+    done = p.choose(page(filled, title="Lisbon stays", text="Lisbon stay Alpha\nLisbon stay Beta"), history)
+    assert done["operation"] == "DONE"
+
+
 def test_item_page_title_finishes_the_goal(fake):
     p = policy({"requirements": [], "open": "Casa Flora", "finish": "Casa Flora is open."})
     d = p.choose(page(FORM, title="Casa Flora · Forma"), [])
@@ -95,6 +111,17 @@ def test_item_page_title_finishes_the_goal(fake):
 def test_a_search_results_title_is_not_the_item_page():
     assert laya.titled("Casa Flora · Forma", "Casa Flora")
     assert not laya.titled("Casa Flora - Search results - Forma", "Casa Flora")
+
+
+def test_unicode_matching_preserves_chinese_and_folds_latin_accents():
+    assert laya.fold("出发地 Zürich") == "出发地 zurich"
+    assert laya.words("出发城市") & laya.words("出发地")
+    assert laya.words("上海虹桥") & laya.words("上海")
+
+
+def test_chinese_search_results_title_is_not_the_item_page():
+    assert laya.titled("上海车票 · 本地演示", "上海车票")
+    assert not laya.titled("上海车票 - 搜索结果", "上海车票")
 
 
 def test_every_target_is_an_observed_action(fake):
@@ -140,6 +167,36 @@ def test_a_target_that_never_executes_is_dropped(fake):
 def test_plain_code_settles_what_it_can(value, current, expected):
     element = {"role": "combobox", "current": current, "options": []}
     assert laya.settled({"what": "x", "value": value}, element) is expected
+
+
+def test_plain_code_understands_chinese_dates():
+    element = {"role": "textbox", "current": "2026年10月20日", "options": []}
+    assert laya.settled({"what": "出发日期", "value": "2026年10月20日"}, element)
+    element["current"] = "2026年10月21日"
+    assert laya.settled({"what": "出发日期", "value": "2026年10月20日"}, element) is False
+
+
+@pytest.mark.parametrize("label", ["搜索车次", "确认", "继续下一步", "查询"])
+def test_chinese_submit_labels_are_detected(label):
+    assert laya.is_submit_label(label)
+
+
+def test_chinese_plan_types_exact_value_into_exact_field(fake):
+    form = [
+        {"id": "from", "kind": "fill", "label": "出发地", "role": "textbox", "value": "", "node": 11},
+        {"id": "to", "kind": "fill", "label": "目的地", "role": "textbox", "value": "", "node": 12},
+        {"id": "submit", "kind": "click", "label": "搜索车次", "role": "button", "value": "", "node": 13},
+    ]
+    p = policy({
+        "requirements": [
+            {"what": "出发地", "value": "杭州"},
+            {"what": "目的地", "value": "上海"},
+        ],
+        "open": None,
+        "finish": "页面显示杭州到上海的车次。",
+    })
+    decision = p.choose(page(form, title="车票搜索", text="出发地 目的地 搜索车次"), [])
+    assert (decision["operation"], decision["choice"], decision["text"]) == ("TYPE_TEXT", "from", "杭州")
 
 
 def test_checkbox_requirements_follow_the_checked_state():

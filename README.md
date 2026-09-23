@@ -1,9 +1,11 @@
-# Laya Ultrafast ⚡
+# Laya Computer Use
 
-**A local, open-weight port of [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast).**
+**A local browser decision agent built with Laya on Apple Silicon.**
 
 > [!NOTE]
 > This project is a clone of **[jev-ultrafast](https://github.com/browser-use/jev-ultrafast) by [Browser Use](https://github.com/browser-use)**, ported to make its decisions with **[Laya](https://github.com/mizorewww/laya-mlx)** running locally through MLX. The browser agent, DOM snapshot, executor, safety checks, inspector and most of the design are theirs. All credit for the original work goes to the jev-ultrafast authors. For how the agent works, see the [original repository](https://github.com/browser-use/jev-ultrafast).
+
+This repository continues the work in [ipenywis/laya-ultrafast](https://github.com/ipenywis/laya-ultrafast). It retains the original MIT attribution and adds Unicode-aware matching, a Chinese local fixture, same-page result handling, current `laya-mlx` compatibility, and model-agnostic inspector wording.
 
 > [!IMPORTANT]
 > **Apple Silicon only.** Laya runs through [laya-mlx](https://github.com/mizorewww/laya-mlx), which needs an M-series Mac, macOS 14+, and Python 3.11+ (this project uses 3.12+). If you're looking to run it on a different OS/machine, check the original [Laya](https://github.com/NandhaKishorM/laya)
@@ -22,6 +24,16 @@ jev-ultrafast asks [TypeSafe's Jev](https://docs.typesafe.ai/introduction), a ho
   Every target is still an element the agent observed on the page, and there are no site-specific plans.
 - **Hosted mode still works.** Set `DECISION_MODEL=typesafe` to use the original Jev policy unchanged.
 
+## Improvements in this repository
+
+- **Chinese and Unicode matching:** CJK text is retained instead of being discarded by ASCII folding. Overlapping CJK terms let labels such as `出发地` match requirements such as `出发城市`, while accented Latin text such as `Zürich` still normalizes predictably.
+- **Chinese dates and controls:** the deterministic layer recognizes `2026年10月20日`, Chinese search and submit labels, and Chinese negative toggle wording.
+- **Single-page applications:** a form submission may finish from visible result evidence even when the host and path do not change.
+- **Local Chinese fixture:** the inspector includes a non-transactional `中文车票搜索` scenario for examining fields, choices, probabilities, and actions without touching a real account.
+- **Current runtime:** the project targets `laya-mlx` 0.2.x.
+
+These changes improve input handling and coverage. They do not establish general Chinese browser-task accuracy; evaluate the actual sites and goals you intend to automate.
+
 ## Laya setup
 
 Laya itself is documented in **[mizorewww/laya-mlx](https://github.com/mizorewww/laya-mlx)**, an independent MLX port of [Convai Innovations' Laya](https://github.com/NandhaKishorM/laya). Read it for requirements, checkpoints, benchmarks and troubleshooting.
@@ -38,8 +50,8 @@ Later runs load it from the Hugging Face cache and need no network for decisions
 ## Quick start
 
 ```bash
-git clone <this repository>
-cd laya-ultrafast
+git clone https://github.com/ZhacoHewgo/laya-computer-use.git
+cd laya-computer-use
 uv sync
 uv run hf download aac6fef/laya-typed-decisions-mlx
 cp .env.example .env    # then set TEXT_MODEL_API_KEY, or point TEXT_MODEL_BASE_URL at a local server
@@ -47,6 +59,8 @@ uv run laya
 ```
 
 Open **http://127.0.0.1:8766**, choose a scenario, and click **Start demo → Run automatically**.
+
+For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. Its default goal searches a generated local page and never logs in, purchases, or sends data elsewhere. A text planner is still required once per task; point `TEXT_MODEL_BASE_URL` at a local OpenAI-compatible server for an offline run.
 
 Chrome connects through [Browser Harness](https://github.com/browser-use/browser-harness), just as in jev-ultrafast. Enable remote debugging at `chrome://inspect/#remote-debugging`, and run `uv run browser-harness --doctor` if the connection fails.
 
@@ -76,6 +90,7 @@ TEXT_MODEL=gemma4:latest
 | Google Flights (checks the final page) | `uv run --env-file .env python examples/flights.py --date 2026-10-20 --keep-open` |
 | Skyscanner (checks the final page) | `uv run --env-file .env python examples/skyscanner.py --date 2026-10-20 --keep-open` |
 | Any site and goal | `uv run --env-file .env python examples/run.py --url URL --goal 'A narrow goal'` |
+| Local Chinese fixture | `uv run laya`, then choose `中文车票搜索` in the inspector |
 
 Flight sites only offer future dates, so pass `--date`. It defaults to 30 days ahead. The examples never select or book a flight.
 
