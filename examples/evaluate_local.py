@@ -24,6 +24,7 @@ for setting in ("BU_CDP_URL", "TEXT_MODEL_BASE_URL"):
 
 from examples.flights import goal as flight_goal  # noqa: E402
 from examples.flights import verify as verify_flights  # noqa: E402
+from examples.verification import python_chapter_checks  # noqa: E402
 from laya_ultrafast import Agent  # noqa: E402
 
 DAY = datetime.date(2026, 10, 20)
@@ -92,10 +93,14 @@ def verify(name, browser, page):
                   "body": "End of article" in text and "Measure the complete loop" in text}
         return {"passed": all(checks.values()), "checks": checks}
     if name == "python_docs":
-        checks = {"url": urlparse(page["url"]).path == "/3/tutorial/datastructures.html",
-                  "heading": "Data Structures" in (browser.evaluate("document.querySelector('h1')?.innerText") or ""),
-                  "body": "list.append(x)" in text and "list.extend(iterable)" in text}
-        return {"passed": all(checks.values()), "checks": checks}
+        observed = browser.evaluate("""(() => ({
+          heading: document.querySelector('h1')?.innerText,
+          methods: [...document.querySelectorAll('#more-on-lists dl.py.method')].map(e => ({
+            signature: e.querySelector('dt')?.innerText || '',
+            description: e.querySelector('dd')?.innerText || ''
+          }))
+        }))()""")
+        return python_chapter_checks(page["url"], observed)
     checks = {
         "travel": {
             "detail": page["title"] == "Casa Flora · Forma",

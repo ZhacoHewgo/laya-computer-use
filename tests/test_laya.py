@@ -93,6 +93,81 @@ def test_goal_values_are_typed_without_a_per_field_text_call(fake):
     assert d["target"] == "1"
 
 
+def result_policy():
+    p = policy({"requirements": [], "open": "Data Structures", "finish": "Chapter body open."})
+    p.submitted = True
+    return p
+
+
+def test_async_results_wait_before_asking_model_for_missing_item(fake, monkeypatch):
+    monkeypatch.setattr(laya.time, "monotonic", lambda: 100)
+    p = result_policy()
+    p.result_deadline = 105
+    d = p.choose(page([], title="Search"), [])
+    assert d["operation"] == "WAIT" and not fake.calls
+    target = {"id": "chapter", "kind": "click", "node": 50, "role": "link", "label": "5. Data Structures"}
+    d = p.choose(page([target]), [])
+    assert d["choice"] == "chapter"  # No fixed five-second delay when the target has arrived.
+
+
+def test_absent_result_stops_after_grace_without_resubmitting(fake, monkeypatch):
+    monkeypatch.setattr(laya.time, "monotonic", lambda: 106)
+    fake.prefer = lambda _qid, criteria: "none" if "none" in criteria else next(iter(criteria))
+    p = result_policy()
+    p.result_deadline = 105
+    assert p.choose(page([]), [])["operation"] == "BLOCKED"
+
+
+def test_search_results_scroll_until_target_becomes_visible(fake):
+    p, history = result_policy(), []
+    scroll = {"id": "scroll_down", "kind": "scroll", "label": "Scroll down", "delta": 560}
+    first = p.choose(page([scroll]), history)
+    assert first["choice"] == "scroll_down" and first["target_source"] == "rule"
+    executed(history, first)
+    target = {"id": "chapter", "kind": "click", "node": 50, "role": "link", "label": "5. Data Structures"}
+    next_page = page([scroll, target])
+    next_page["scroll"]["y"] = 560
+    assert p.choose(next_page, history)["choice"] == "chapter"
+
+
+def test_unmoved_scroll_is_not_repeated(fake):
+    p, history = result_policy(), []
+    snapshot = page([{"id": "scroll_down", "kind": "scroll", "label": "Scroll down", "delta": 560}])
+    executed(history, p.choose(snapshot, history))
+    assert p.choose(snapshot, history)["operation"] == "BLOCKED"
+
+
+def test_submitted_search_field_scrolling_offscreen_does_not_restart_field_wait(fake):
+    p = result_policy()
+    p.plan["requirements"] = [{"what": "search", "value": "Data Structures"}]
+    p.met = p.frozen = {0}
+    p.search_added = True
+    snapshot = page([{"id": "scroll_down", "kind": "scroll", "label": "Scroll down", "delta": 560}])
+    assert p.choose(snapshot, [])["operation"] == "SCROLL"
+
+
+def test_result_scroll_budget_is_bounded(fake):
+    p, history = result_policy(), []
+    snapshot = page([{"id": "scroll_down", "kind": "scroll", "label": "Scroll down", "delta": 560}])
+    for i in range(laya.MAX_RESULT_SCROLLS):
+        snapshot["scroll"]["y"] = i * 560
+        d = p.choose(snapshot, history)
+        assert d["operation"] == "SCROLL"
+        executed(history, d)
+    snapshot["scroll"]["y"] = laya.MAX_RESULT_SCROLLS * 560
+    assert p.choose(snapshot, history)["operation"] == "BLOCKED"
+
+
+def test_stem_overlap_is_not_an_exact_item_title(fake):
+    p = result_policy()
+    misleading = {"id": "wrong", "kind": "click", "node": 50, "role": "link",
+                  "label": "struct — Interpret bytes as packed binary data"}
+    scroll = {"id": "scroll_down", "kind": "scroll", "label": "Scroll down", "delta": 560}
+    assert p.choose(page([misleading, scroll]), [])["operation"] == "SCROLL"
+    exact = {"id": "right", "kind": "click", "node": 51, "role": "link", "label": "5. Data Structures"}
+    assert p.choose(page([misleading, exact, scroll]), [])["choice"] == "right"
+
+
 def test_typed_text_is_submitted_before_opening_a_result(fake):
     p, history = policy(), []
     executed(history, p.choose(page(FORM), history))

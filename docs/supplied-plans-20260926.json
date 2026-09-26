@@ -1,0 +1,100 @@
+{
+  "provenance": {
+    "model": "GPT in current Codex conversation (supplied plan)",
+    "model_calls": 0,
+    "latency_ms": 0,
+    "source": "Plan written in the current conversation before execution; not a GPT API call",
+    "usage": {}
+  },
+  "plans": {
+    "python_docs": {
+      "requirements": [],
+      "open": "Data Structures",
+      "finish": "The Data Structures chapter of the Python tutorial is open, showing its chapter heading and the More on Lists section."
+    },
+    "travel": {
+      "requirements": [
+        {
+          "what": "Destination",
+          "value": "Lisbon"
+        },
+        {
+          "what": "Category",
+          "value": "Design"
+        },
+        {
+          "what": "Free cancellation",
+          "value": "enabled"
+        }
+      ],
+      "open": "Casa Flora",
+      "finish": "Casa Flora detail shows Lisbon, Design and Free cancellation enabled."
+    },
+    "research": {
+      "requirements": [],
+      "open": "A browser is a choice, not a conversation",
+      "finish": "The article about using finite choices to control browser agents is open with its body."
+    },
+    "zh": {
+      "requirements": [
+        {
+          "what": "出发地",
+          "value": "杭州"
+        },
+        {
+          "what": "目的地",
+          "value": "上海"
+        },
+        {
+          "what": "出发日期",
+          "value": "2026年10月20日"
+        },
+        {
+          "what": "行程",
+          "value": "单程"
+        },
+        {
+          "what": "仅看直达",
+          "value": "enabled"
+        }
+      ],
+      "open": null,
+      "finish": "匹配杭州到上海、2026年10月20日、单程直达的车次结果可见。"
+    },
+    "wikipedia": {
+      "requirements": [],
+      "open": "Gödel's incompleteness theorems",
+      "finish": "The Gödel's incompleteness theorems article is open with its body."
+    },
+    "flights": {
+      "requirements": [
+        {
+          "what": "ticket type",
+          "value": "One way"
+        },
+        {
+          "what": "Where from?",
+          "value": "Zurich"
+        },
+        {
+          "what": "Where to?",
+          "value": "London"
+        },
+        {
+          "what": "Departure",
+          "value": "October 20, 2026"
+        },
+        {
+          "what": "passengers",
+          "value": "1 adult"
+        },
+        {
+          "what": "cabin",
+          "value": "Economy"
+        }
+      ],
+      "open": null,
+      "finish": "Matching one-way Zurich to London flights on October 20, 2026, for one adult in economy are visible. Do not select or book."
+    }
+  }
+}

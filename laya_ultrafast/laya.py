@@ -44,7 +44,9 @@ UNFINISHED = {
     "other": "some other page",
 }
 
-MAX_RESULT_WAITS = 12  # about 2 s of observation while submitted results load
+MAX_RESULT_WAITS = 12  # bounded observation attempts for submission acknowledgement
+ITEM_RESULT_GRACE_SECONDS = 5.0
+MAX_RESULT_SCROLLS = 8
 
 _MODEL = None
 
@@ -284,6 +286,8 @@ class LayaPolicy:
         self.submit_url = None
         self.awaiting_submit = False
         self.dirty_forms = set()
+        self.result_deadline = 0.0
+        self.result_scrolls = set()
 
     # Bookkeeping ---------------------------------------------------------------------------------------------
 
@@ -303,6 +307,10 @@ class LayaPolicy:
                 self.before_submit_nodes = step["before"]
                 self.submit_url = step["url"]
                 self.awaiting_submit = True
+                self.result_deadline = time.monotonic() + ITEM_RESULT_GRACE_SECONDS
+                self.result_scrolls.clear()
+            if step["kind"] == "scroll":
+                self.result_scrolls.add((step["url"], step["scroll_y"]))
             if step["req"] is not None:
                 self.attempts[step["req"]] = self.attempts.get(step["req"], 0) + 1
                 self.edit_url, self.submitted = step["url"], False
@@ -380,6 +388,7 @@ class LayaPolicy:
             "label": element["label"] if element else None,
             "visible_lines": {line.strip() for line in page["text"].splitlines()},
             "form": element.get("form") if element else None,
+            "scroll_y": page.get("scroll", {}).get("y", 0),
         }
         return {
             "choice": choice,
@@ -445,7 +454,7 @@ class LayaPolicy:
                 self.search_added = True
 
         # 2. Requirements in the goal's order: map each to an observed element, then check its value.
-        if reqs and not any(plannable(e) for e in elements):
+        if set(range(len(reqs))) - self.met and not any(plannable(e) for e in elements):
             # Nothing to fill yet: the page is still loading or showing an interstitial. This costs no attempt.
             op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
             return op, None, None, None, op.lower(), None, None
@@ -562,6 +571,19 @@ class LayaPolicy:
         state = f"Goal: {self.goal}\nFinish condition: {finish}\nPage title: {page['title']}\nPage: {page['text']}"
         if item:
             named = [e for e in candidates if relevance(e, item) and not is_field(e)]
+            # Navigation acknowledges a submit, not completion of asynchronous results. An exact
+            # title can be acted on immediately; otherwise give results time to arrive, then inspect
+            # lower viewports using only the scroll action offered by this observation.
+            phrase = fold(item)
+            strong = [e for e in named if phrase and phrase in fold(e["label"])]
+            if self.submitted and not strong:
+                if time.monotonic() < self.result_deadline:
+                    return "WAIT", None, None, None, "wait", None, None
+                scroll = next((a for a in page["actions"] if a["kind"] == "scroll" and a.get("delta", 0) > 0), None)
+                position = (page["url"], page.get("scroll", {}).get("y", 0))
+                if scroll and position not in self.result_scrolls and len(self.result_scrolls) < MAX_RESULT_SCROLLS:
+                    return "SCROLL", None, scroll, None, "scroll", None, None
+            named = strong or named
             # Near-duplicates ("completeness" vs "incompleteness") fooled Laya, so only the elements naming
             # the most of the item's words stay; Laya breaks exact ties.
             picked = self.pick("item", named, state, f"Which element opens {item}?", item, top_tier=True, margin=0)
