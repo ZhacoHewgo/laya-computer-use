@@ -412,7 +412,7 @@ def test_a_target_that_never_executes_is_dropped(fake):
         ("October 20, 2026", "Wed, Oct 21", False),
         ("Zurich", "Zürich", True),
         ("London", "", False),
-        ("one-way", "Round trip", None),
+        ("one-way", "Round trip", False),
     ],
 )
 def test_plain_code_settles_what_it_can(value, current, expected):
@@ -615,3 +615,48 @@ def test_exact_field_names_take_priority_over_partial_words(fake):
     ])
     assert p.choose(snapshot, [])['choice'] == 'from'
     assert p.fields == {0: 1, 1: 2} and not fake.calls
+
+
+@pytest.mark.parametrize('required,current,expected', [
+    ('one-way', 'Round trip', False), ('单程', '往返', False),
+    ('round-trip', 'One way', False), ('one-way', 'One way', True),
+])
+def test_mutually_exclusive_trip_values_are_checked_without_model(required, current, expected):
+    element = {'role': 'combobox', 'current': current, 'options': []}
+    assert laya.settled({'what': 'Change ticket type. Round trip', 'value': required}, element) is expected
+
+
+def test_wrong_trip_is_not_satisfied_even_when_model_always_says_yes(fake):
+    fake.prefer = lambda qid, criteria: 'yes' if qid.startswith('met_') else next(iter(criteria))
+    p = policy({'requirements': [{'what': 'Change ticket type. Round trip', 'value': 'one-way'}],
+                'open': None, 'finish': 'Flights visible'})
+    d = p.choose(page([{'id': 'trip', 'kind': 'click', 'node': 1, 'role': 'combobox',
+                       'label': 'Change ticket type. Round trip', 'value': 'Round trip'}]), [])
+    assert d['choice'] == 'trip' and not p.met
+    assert not any(qid.startswith('met_') for _state, questions in fake.calls for qid in questions)
+
+
+@pytest.mark.parametrize('dialog', [None, 91])
+def test_calendar_date_tokens_do_not_prove_search_results(fake, dialog):
+    p = policy({'requirements': [{'what': 'origin', 'value': 'Zurich'},
+                                 {'what': 'destination', 'value': 'London'},
+                                 {'what': 'date', 'value': 'October 20, 2026'}],
+                'open': None, 'finish': 'Flight options visible'})
+    p.met = p.frozen = {0, 1, 2}
+    p.submitted, p.acted = True, 'submit'
+    actions = [{'id': str(i), 'kind': 'click', 'node': i, 'role': 'button', 'dialog': dialog,
+                'label': 'Tuesday, October 20, 2026'} for i in (4, 5)]
+    d = p.choose(page(actions, text='October 20, 2026\nTuesday, October 20, 2026'), [])
+    assert d['operation'] == 'WAIT'
+    p.waits = laya.MAX_RESULT_WAITS
+    assert p.choose(page(actions), [])['operation'] == 'BLOCKED'
+
+
+def test_open_dialog_blocks_done_even_with_matching_result_like_text(fake):
+    p = policy({'requirements': [{'what': 'origin', 'value': 'Zurich'},
+                                 {'what': 'destination', 'value': 'London'}],
+                'open': None, 'finish': 'Flight options visible'})
+    p.met = p.frozen = {0, 1}
+    p.submitted, p.acted = True, 'submit'
+    actions = [{'id': 'done', 'kind': 'click', 'node': 4, 'role': 'button', 'dialog': 91, 'label': 'Done'}]
+    assert p.choose(page(actions, text='Zurich London option A\nZurich London option B'), [])['operation'] == 'WAIT'

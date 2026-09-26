@@ -19,6 +19,9 @@ from .model import plan_goal, validate_choice
 DEFAULT_MODEL = "aac6fef/laya-typed-decisions-mlx"
 FIELD_ROLES = {"combobox", "textbox", "searchbox", "spinbutton", "checkbox", "radio", "switch"}
 TOGGLES = {"checkbox", "radio", "switch"}
+TRIP_TYPES = {"one way": "single", "oneway": "single", "单程": "single",
+              "round trip": "return", "roundtrip": "return", "return": "return", "往返": "return",
+              "multi city": "multi", "multicity": "multi", "多程": "multi"}
 NEGATIVE = {"no", "off", "false", "unchecked", "disabled", "without", "none"}
 NEGATIVE_CJK = {"关闭", "未选", "禁用", "无需", "无须", "不要", "不需要", "不启用", "不勾选"}
 SUBMIT_WORDS = {"search", "submit", "find", "go", "apply", "done", "continue", "next", "confirm", "show"}
@@ -204,6 +207,9 @@ def settled(requirement, e):
     if wanted and shown:
         return wanted == shown
     fv, fc = fold(value), fold(current)
+    # Known mutually exclusive values must not be overruled by a semantic yes/no answer.
+    if fv in TRIP_TYPES and fc in TRIP_TYPES:
+        return TRIP_TYPES[fv] == TRIP_TYPES[fc]
     if fv and (fv in fc or (len(fc) >= 3 and fc in fv)):
         return True
     return None
@@ -579,20 +585,25 @@ class LayaPolicy:
             # Modern search pages often update results in place without changing host or path. A recorded
             # submit plus still-satisfied requirements is enough to evaluate the visible result evidence.
             searched = self.acted == "submit" and self.submitted and self.met >= set(range(len(reqs)))
-            # Laya rarely labels a real results page as one, so also count visible result evidence that names
-            # the requested values: two or more lines or elements mentioning at least three of them.
-            wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
-            matching = [e for e in clickable if wanted and e["node"] not in self.before_submit_nodes
-                        and len(words(e["label"]) & wanted) >= min(3, len(wanted))]
+            # Count distinct requested values, not isolated tokens: a date's month/day/year alone
+            # cannot be three pieces of result evidence. An open picker cannot be a completed search.
+            value_words = {frozenset(words(r["value"])) for r in reqs if words(r["value"])}
+
+            def result_evidence(text):
+                tokens = words(text)
+                matches = sum(len(tokens & value) >= min(2, len(value)) for value in value_words)
+                return bool(value_words) and matches >= min(2, len(value_words))
+
+            matching = [e for e in clickable if e["node"] not in self.before_submit_nodes
+                        and not is_field(e) and result_evidence(e["label"])]
             matching_lines = [
                 line for line in page["text"].splitlines()
-                if wanted and line.strip() not in self.before_submit_lines
-                and len(words(line) & wanted) >= min(3, len(wanted))
+                if line.strip() not in self.before_submit_lines and result_evidence(line)
             ]
             # A model verdict alone cannot prove that submission produced any results.
-            if (not reqs and done["choice"] == "finish") or (
+            if not any(e["dialog"] is not None for e in elements) and ((not reqs and done["choice"] == "finish") or (
                 searched and max(len(matching), len(matching_lines)) >= 2
-            ):
+            )):
                 return "DONE", None, None, None, "done", None, None
             if searched and self.waits < MAX_RESULT_WAITS:
                 return "WAIT", None, None, None, "wait", None, None

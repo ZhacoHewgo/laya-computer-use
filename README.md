@@ -102,6 +102,8 @@ TEXT_MODEL=gemma4:latest
 
 ### Verified example: Google Flights with local Laya
 
+**Live API planning now verified too:** [实际 API 规划与 Laya 执行](docs/api-planner-validation-20260926.md) records one successful run using `cx/gpt-6-luna` through a local compatible endpoint: 8.461 seconds including 4.705 seconds of planning, 14 local Laya calls, and nine independent checks. The example below uses the earlier saved-plan setup.
+
 **Zürich → London, one-way, October 20, 2026, one adult in economy.** The recorded run completed in 6.631 seconds with 11 local Laya calls and nine independent checks. It used a saved GPT plan from a Codex conversation, with no text-model API calls during execution; timing excludes planning, model loading and initial navigation.
 
 [Run this example and inspect its evidence →](docs/flights-example.md)
