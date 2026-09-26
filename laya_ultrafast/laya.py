@@ -139,6 +139,7 @@ def observed(page):
                 "expanded": action.get("expanded"),
                 "hint": action.get("hint", ""),
                 "form": action.get("form"),
+                "dialog": action.get("dialog"),
                 "is_submit": action.get("is_submit", False),
                 "actions": {},
                 "options": [],
@@ -288,6 +289,10 @@ class LayaPolicy:
         self.dirty_forms = set()
         self.result_deadline = 0.0
         self.result_scrolls = set()
+        self.confirming_dialog = None
+        self.satisfied_values = {}
+        self.input_step = None
+        self.rejected_fields = {}
 
     # Bookkeeping ---------------------------------------------------------------------------------------------
 
@@ -298,6 +303,10 @@ class LayaPolicy:
             self.failed[step["node"]] = self.failed.get(step["node"], 0) + 1
         if len(history) > self.seen and step and history[-1].get("choice") == step["choice"]:
             self.last = step
+            if step["kind"] in {"fill", "open"}:
+                self.input_step = step
+            elif step["kind"] != "wait":
+                self.input_step = None
             if step["kind"] == "item":
                 self.item_step = step
             elif step["kind"] != "wait":
@@ -311,6 +320,8 @@ class LayaPolicy:
                 self.result_scrolls.clear()
             if step["kind"] == "scroll":
                 self.result_scrolls.add((step["url"], step["scroll_y"]))
+            if step["kind"] == "confirm":
+                self.confirming_dialog = step["dialog"]
             if step["req"] is not None:
                 self.attempts[step["req"]] = self.attempts.get(step["req"], 0) + 1
                 self.edit_url, self.submitted = step["url"], False
@@ -388,6 +399,8 @@ class LayaPolicy:
             "label": element["label"] if element else None,
             "visible_lines": {line.strip() for line in page["text"].splitlines()},
             "form": element.get("form") if element else None,
+            "dialog": element.get("dialog") if element else None,
+            "role": element.get("role") if element else None,
             "scroll_y": page.get("scroll", {}).get("y", 0),
         }
         return {
@@ -417,6 +430,22 @@ class LayaPolicy:
         clickable = [e for e in elements if "click" in e["actions"] and self.failed.get(e["node"], 0) < 2]
         last = self.last
 
+        # Confirming a picker is a substep, not submission of the whole search form.
+        # Never replay its confirmation while waiting for the dialog to close.
+        if self.confirming_dialog is not None:
+            if any(e["dialog"] == self.confirming_dialog for e in elements):
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
+            self.confirming_dialog = None
+
+        if last and last["kind"] == "pick" and last.get("dialog") is not None and last["req"] is not None:
+            requirement = reqs[last["req"]]
+            selected = {"role": "option", "current": last["label"], "options": []}
+            confirms = [e for e in clickable if e["dialog"] == last["dialog"] and e["role"] == "button"
+                        and re.match(r"^(?:done|confirm|apply|确定|确认|应用|完成)(?:$|\s)", fold(e["label"]))]
+            if settled(requirement, selected) is True and len(confirms) == 1:
+                return self.click((confirms[0], None), "confirm", None)
+
         if self.awaiting_submit:
             # A click is not acknowledgement. Wait for read-only evidence before any further mutation.
             wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
@@ -433,16 +462,23 @@ class LayaPolicy:
                 self.frozen |= self.met
 
         # 1. A typed query or an opened control offers new choices: take the one its requirement asks for.
-        if last and last["kind"] in {"fill", "open"} and last["req"] is not None:
-            r = reqs[last["req"]]
-            new = [e for e in clickable if e["node"] not in last["before"]]
+        editing = self.input_step or (last if last and last["kind"] in {"fill", "open"} else None)
+        if editing and editing["req"] is not None:
+            r = reqs[editing["req"]]
+            new = [e for e in clickable if e["node"] not in editing["before"]]
             # Suggestions name the value; controls that appear beside them ("Clear", "Swap") do not.
             new = [e for e in new if relevance(e, r["value"])]
             state = f"Requirement: {r['what']} = {r['value']}"
             picked = self.pick("option", new, state, f"Which option sets {r['what']} to {r['value']}?",
                                r["value"], allow_none=True)
             if picked:
-                return self.click(picked, "pick", last["req"])
+                return self.click(picked, "pick", editing["req"])
+            current = by_node.get(editing["node"])
+            if editing["kind"] == "fill" and editing.get("role") == "combobox" and (
+                current is None or current["expanded"] in {True, "true"}
+            ):
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
 
         # An item to open that nothing on the page names has to be searched for first.
         item = self.plan.get("open")
@@ -478,6 +514,7 @@ class LayaPolicy:
                     continue
                 about = f"{r['what']} {r['value']}"
                 options = [c for c in clickable if c["role"] not in TOGGLES or words(c["label"]) & words(about)]
+                options = [c for c in options if c["node"] not in self.rejected_fields.get(i, set())]
                 options = [c for c in options if relevance(c, about)] or options
                 picked = self.pick(f"set_{i}", options, state, f"Which element sets {r['what']} to {r['value']}?",
                                    about, allow_none=True)
@@ -612,8 +649,8 @@ class LayaPolicy:
         """Match requirements to fields. Laya is asked both ways (which field sets this requirement, which
         requirement does this field hold); the product matched Flights fields better than either direction.
         The most confident pairs are assigned first, so two requirements never share one field.
-        There is no "none" option: in tests it outvoted the right field. Requirements no field can hold
-        reach the attempt limit instead. Laya shares one state per request, so each question is one call."""
+        The reverse question can reject a pair: a field scoring higher for none stays unassigned.
+        Laya shares one state per request, so each question is one call."""
         reqs = self.plan["requirements"]
         free = shortlist(free, " ".join(f"{reqs[i]['what']} {reqs[i]['value']}" for i in todo), 20)
         fields = {str(e["node"]): describe(e) for e in free}
@@ -631,6 +668,9 @@ class LayaPolicy:
             }})[f"holds_{node}"]["probabilities"]
             for node, text in fields.items()
         }
+        for i in todo:
+            self.rejected_fields[i] = {int(node) for node in fields
+                                       if by_field[node][str(i)] <= by_field[node]["none"]}
         # A shared word between the field's label and the requirement's name ("Departure", "departure date")
         # doubles the pair's score.
         label = {str(e["node"]): words(e["label"]) for e in free}
@@ -639,6 +679,7 @@ class LayaPolicy:
                 (by_requirement[i][node] * by_field[node][str(i)] * (1 + bool(label[node] & words(reqs[i]["what"]))),
                  i, node)
                 for i in todo for node in fields
+                if by_field[node][str(i)] > by_field[node]["none"]
             ),
             reverse=True,
         )
@@ -651,6 +692,7 @@ class LayaPolicy:
 
     def refresh(self, page, elements, by_node):
         """Map unmapped requirements to observed elements, then check their current values."""
+        self.rejected_fields = {}
         reqs = self.plan["requirements"]
         open_reqs = [i for i in range(len(reqs)) if i not in self.frozen]
         fields = [e for e in elements if is_field(e)]
@@ -667,8 +709,16 @@ class LayaPolicy:
             # The planner names requirements by the observed field label when one sets them.
             named = [e for e in elements if plannable(e) and e["node"] not in taken
                      and fold(r["what"]) in {fold(e["label"]), fold(display(e))}]
-            if len(exact) == 1 or len(named) == 1:
-                self.fields[i] = (exact or named)[0]["node"]
+            if not named:
+                tokens = set(fold(r["what"]).split())
+                named = [e for e in free if tokens and tokens <= set(fold(e["label"]).split())]
+            # A unique field already displaying the exact non-numeric requested value is evidence
+            # too (e.g. a seating-class control displaying Economy), without a speculative remap.
+            current = [e for e in free if len(fold(r["value"])) >= 3 and not fold(r["value"]).isdigit()
+                       and fold(e["current"]) == fold(r["value"])]
+            match = exact if len(exact) == 1 else named if len(named) == 1 else current
+            if len(match) == 1:
+                self.fields[i] = match[0]["node"]
                 taken.add(self.fields[i])
             else:
                 todo.append(i)
@@ -687,10 +737,13 @@ class LayaPolicy:
             if e is None:
                 continue
             verdict = settled(reqs[i], e)
-            if verdict is None and i not in self.met:
-                checks[i] = e
+            if verdict is None:
+                if i not in self.met or self.satisfied_values.get(i) != (e["node"], e["current"]):
+                    self.met.discard(i)
+                    checks[i] = e
             elif verdict:
                 self.met.add(i)
+                self.satisfied_values[i] = (e["node"], e["current"])
             else:
                 self.met.discard(i)
         for i, e in checks.items():
@@ -701,3 +754,4 @@ class LayaPolicy:
             })[f"met_{i}"]
             if answer["choice"] == "yes":
                 self.met.add(i)
+                self.satisfied_values[i] = (e["node"], e["current"])

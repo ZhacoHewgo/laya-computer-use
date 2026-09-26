@@ -117,6 +117,8 @@ For this fork's Apple M4 + local Qwen + multilingual Laya results, see [Qwen 规
 
 The newer [搜索等待与滚动修复](docs/search-results-fix-20260926.md) uses saved plans supplied by GPT in a Codex conversation, with zero text-model API calls during execution. Python Docs and three local scenarios passed; Wikipedia and Google Flights still failed. This is a supplied-plan execution comparison, not an automatic GPT API integration or a general success-rate benchmark.
 
+The latest [航班弹窗与字段匹配修复](docs/flight-dialog-fix-20260926.md) passed Google Flights with the same saved plan: 6.631 seconds, 11 local Laya calls, and nine independent outcome checks. Python Docs and the three local scenarios also passed; Wikipedia still failed. Planning time is excluded, and these are fixed development tasks, not a general reliability benchmark.
+
 The following numbers are retained from [ipenywis/laya-ultrafast](https://github.com/ipenywis/laya-ultrafast). They report an M1 Max with `inception/mercury-2.5` on OpenRouter. They do not measure this fork's Qwen or multilingual configuration:
 
 | Task | Result | Time |

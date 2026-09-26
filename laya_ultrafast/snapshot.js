@@ -69,6 +69,8 @@
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
     const base={node:identity(e),role:rname,label:name(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
+    const dialog=e.closest('dialog[open],[role="dialog"],[aria-modal="true"]');
+    if (dialog) base.dialog=identity(dialog);
     if (e.form) base.form=identity(e.form);
     if (rname==='button') base.is_submit=!!e.form && ['submit','image'].includes(e.type);
     const purpose=hint(e);

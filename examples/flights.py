@@ -34,11 +34,17 @@ def verify(page, day=RECORDED_DAY):
     actions = page["actions"]
     values = {a["label"].strip(): a.get("value") for a in actions}
     flights = [a["label"] for a in actions if "Select flight" in a["label"]]
+    def route_field(label, value):
+        # Google appends the selected airport to the accessible name, e.g. Where from? Zürich ZRH.
+        return any(a.get("role") == "combobox" and a.get("value") == value
+                   and (a["label"].strip() == label or a["label"].startswith(label + " ")) for a in actions)
     checks = {
         "search_page": parsed.hostname == "www.google.com" and parsed.path == "/travel/flights/search",
         "one_way": values.get("Change ticket type. One way") == "One way",
-        "origin": values.get("Where from?") == "Zürich",
-        "destination": values.get("Where to?") == "London",
+        "origin": route_field("Where from?", "Zürich"),
+        "destination": route_field("Where to?", "London"),
+        "adults": "1 passenger, change number of passengers." in values and "for 1 adult" in page["text"],
+        "economy": values.get("Change seating class. Economy") == "Economy",
         "date": values.get("Departure") == f"{day:%a, %b} {day.day}",
         "year": date_in_url or f"departing {day.isoformat()}" in page["text"],
         "results": bool(flights) and all(f"{day:%A, %B} {day.day}" in f for f in flights),

@@ -526,3 +526,92 @@ def test_skyscanner_verification_reads_the_search_url():
     assert verify(good, day)["passed"]
     assert not verify(dict(good, url=good["url"].replace("261020", "261021")), day)["passed"]
     assert not verify(dict(good, url="https://www.skyscanner.net/sttc/px/captcha-v2/index.html"), day)["passed"]
+
+
+def test_reverse_field_rejection_prevents_forced_single_candidate(fake):
+    fake.prefer = lambda qid, criteria: 'none' if qid.startswith('holds_') else next(iter(criteria))
+    p = policy({'requirements': [{'what': 'passengers', 'value': '1 adult'}], 'open': None, 'finish': 'Results'})
+    elements = laya.observed(page([{'id': 'trip', 'kind': 'click', 'node': 46, 'role': 'combobox',
+                                   'label': 'Select your ticket type', 'value': 'One way'}]))
+    p.answers, p.questions, p.tokens, p.model_calls = {}, {}, 0, 0
+    p.assign([0], elements)
+    assert p.fields == {}
+
+
+def test_unchanged_semantic_value_stays_satisfied_but_changed_value_is_rechecked(fake):
+    fake.prefer = lambda qid, criteria: 'yes' if qid.startswith('met_') else next(iter(criteria))
+    p = policy({'requirements': [{'what': 'passengers', 'value': '1 adult'}], 'open': None, 'finish': 'Results'})
+    p.fields[0] = 9
+    actions = [{'id': 'people', 'kind': 'click', 'node': 9, 'role': 'button', 'label': '1 passenger'}]
+    def refresh():
+        snapshot = page(actions)
+        elements = laya.observed(snapshot)
+        p.answers, p.questions, p.tokens, p.model_calls = {}, {}, 0, 0
+        p.refresh(snapshot, elements, {e['node']: e for e in elements})
+    refresh()
+    assert p.met == {0}
+    calls = len(fake.calls)
+    refresh()
+    assert p.met == {0} and len(fake.calls) == calls
+    actions[0]['label'] = '2 passengers'
+    fake.prefer = lambda qid, criteria: 'no' if qid.startswith('met_') else next(iter(criteria))
+    refresh()
+    assert p.met == set() and len(fake.calls) > calls
+
+
+def test_picker_confirmation_precedes_unrelated_requirements_and_is_not_form_submit(fake):
+    p = policy({'requirements': [{'what': 'date', 'value': 'October 20, 2026'},
+                                 {'what': 'passengers', 'value': '1 adult'}], 'open': None, 'finish': 'Results'})
+    p.last = {'kind': 'pick', 'req': 0, 'dialog': 80, 'label': 'Tuesday, October 20, 2026'}
+    p.typed = True
+    snapshot = page([
+        {'id': 'done', 'kind': 'click', 'node': 81, 'dialog': 80, 'role': 'button',
+         'label': 'Done. Apply the selected date'},
+        {'id': 'trip', 'kind': 'click', 'node': 82, 'dialog': 80, 'role': 'combobox',
+         'label': 'Select your ticket type', 'value': 'One way'},
+    ])
+    history = []
+    decision = p.choose(snapshot, history)
+    assert decision['choice'] == 'done' and not fake.calls
+    assert p.pending['kind'] == 'confirm'
+    executed(history, decision)
+    assert p.choose(snapshot, history)['operation'] == 'WAIT'
+    assert not p.awaiting_submit and not p.submitted
+    assert p.typed  # Still needs to submit the outer search form.
+
+
+def test_rejected_field_is_not_reintroduced_by_fallback_click(fake):
+    fake.prefer = lambda qid, criteria: 'none' if qid.startswith('holds_') else next(iter(criteria))
+    p = policy({'requirements': [{'what': 'passengers', 'value': '1 adult'}], 'open': None, 'finish': 'Results'})
+    snapshot = page([{'id': 'trip', 'kind': 'click', 'node': 46, 'role': 'combobox',
+                      'label': 'Select your ticket type', 'value': 'One way'}])
+    assert p.choose(snapshot, [])['operation'] == 'WAIT'
+    assert p.fields == {}
+
+
+def test_delayed_autocomplete_survives_wait_without_retyping_or_advancing(fake):
+    p = policy({'requirements': [{'what': 'Origin', 'value': 'Zurich'},
+                                 {'what': 'Destination', 'value': 'London'}], 'open': None, 'finish': 'Results'})
+    origin = {'id': 'origin', 'kind': 'fill', 'node': 1, 'role': 'combobox', 'label': 'Origin', 'value': ''}
+    destination = {'id': 'dest', 'kind': 'fill', 'node': 2, 'role': 'textbox', 'label': 'Destination', 'value': ''}
+    history = []
+    executed(history, p.choose(page([origin, destination]), history))
+    origin.update(value='Zurich', expanded='true')
+    decision = p.choose(page([origin, destination]), history)
+    assert decision['operation'] == 'WAIT'
+    executed(history, decision)
+    option = {'id': 'suggestion', 'kind': 'click', 'node': 3, 'role': 'option', 'label': 'Zürich, Switzerland'}
+    decision = p.choose(page([origin, destination, option]), history)
+    assert decision['choice'] == 'suggestion'
+    assert p.attempts[0] == 1
+
+
+def test_exact_field_names_take_priority_over_partial_words(fake):
+    p = policy({'requirements': [{'what': 'Where from?', 'value': 'Zurich'},
+                                 {'what': 'Where to?', 'value': 'London'}], 'open': None, 'finish': 'Results'})
+    snapshot = page([
+        {'id': 'from', 'kind': 'fill', 'node': 1, 'role': 'textbox', 'label': 'Where from?', 'value': ''},
+        {'id': 'to', 'kind': 'fill', 'node': 2, 'role': 'textbox', 'label': 'Where to?', 'value': ''},
+    ])
+    assert p.choose(snapshot, [])['choice'] == 'from'
+    assert p.fields == {0: 1, 1: 2} and not fake.calls

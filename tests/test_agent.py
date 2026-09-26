@@ -282,11 +282,13 @@ def test_flight_verification_rejects_wrong_trip(changed):
 
     actual = {
         "url": "https://www.google.com/travel/flights/search?tfs=example",
-        "text": "Track prices from Zürich to London departing 2026-09-20",
+        "text": "Track prices from Zürich to London departing 2026-09-20. Prices for 1 adult.",
         "actions": [
-            {"label": k, "value": v}
+            {"label": k, "value": v, "role": "combobox" if k.startswith("Where") else "button"}
             for k, v in [
                 ("Change ticket type. One way", "One way"),
+                ("1 passenger, change number of passengers.", ""),
+                ("Change seating class. Economy", "Economy"),
                 ("Where from?", "Zürich"),
                 ("Where to?", "London"),
                 ("Departure", "Sun, Sep 20"),
