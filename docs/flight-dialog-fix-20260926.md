@@ -35,6 +35,7 @@ Flights 的 11 步是切换票型、选择单程、输入/选择起点、输入/
 
 ## 证据与复现
 
+- [GitHub 可直接查看的截图、逐步记录及单任务运行教程](flights-example.md)
 - [测量汇总](flight-dialog-measurement-20260926.json)
 - [本轮复用的预先保存计划](supplied-plans-20260926.json)
 - 本机完整轨迹与截图：`artifacts/flight-dialog-fix-20260926/final/`

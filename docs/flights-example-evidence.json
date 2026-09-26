@@ -1,0 +1,166 @@
+{
+  "recorded_on": "2026-09-26",
+  "goal": "Find one-way flights from Zurich to London on October 20, 2026, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight.",
+  "plan": {
+    "requirements": [
+      {
+        "what": "ticket type",
+        "value": "One way"
+      },
+      {
+        "what": "Where from?",
+        "value": "Zurich"
+      },
+      {
+        "what": "Where to?",
+        "value": "London"
+      },
+      {
+        "what": "Departure",
+        "value": "October 20, 2026"
+      },
+      {
+        "what": "passengers",
+        "value": "1 adult"
+      },
+      {
+        "what": "cabin",
+        "value": "Economy"
+      }
+    ],
+    "open": null,
+    "finish": "Matching one-way Zurich to London flights on October 20, 2026, for one adult in economy are visible. Do not select or book."
+  },
+  "provenance": {
+    "planner": "Saved GPT plan supplied in Codex conversation",
+    "text_model_api_calls": 0,
+    "decision_model": "aac6fef/laya-multilingual-mlx",
+    "initial_navigation_and_plan_generation_included_in_timing": false
+  },
+  "status": "done",
+  "elapsed_ms": 6631,
+  "laya_calls": 11,
+  "steps": [
+    {
+      "step": 1,
+      "action": "Change ticket type. Round trip",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 455,
+      "executed_ms": 351
+    },
+    {
+      "step": 2,
+      "action": "One way",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 903,
+      "executed_ms": 703
+    },
+    {
+      "step": 3,
+      "action": "Where from?",
+      "kind": "fill",
+      "text": "Zurich",
+      "operation": "TYPE_TEXT",
+      "elapsed_ms": 1517,
+      "executed_ms": 1124
+    },
+    {
+      "step": 4,
+      "action": "Zurich Airport (ZRH)",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 1879,
+      "executed_ms": 1655
+    },
+    {
+      "step": 5,
+      "action": "Where to? ",
+      "kind": "fill",
+      "text": "London",
+      "operation": "TYPE_TEXT",
+      "elapsed_ms": 2579,
+      "executed_ms": 2204
+    },
+    {
+      "step": 6,
+      "action": "London, United Kingdom",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 2927,
+      "executed_ms": 2673
+    },
+    {
+      "step": 7,
+      "action": "Departure",
+      "kind": "fill",
+      "text": "October 20, 2026",
+      "operation": "TYPE_TEXT",
+      "elapsed_ms": 3628,
+      "executed_ms": 3439
+    },
+    {
+      "step": 8,
+      "action": "Tuesday, October 20, 2026",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 3896,
+      "executed_ms": 3753
+    },
+    {
+      "step": 9,
+      "action": "Done. Search for one-way flights, departing on October 20, 2026",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 4488,
+      "executed_ms": 4128
+    },
+    {
+      "step": 10,
+      "action": "Search",
+      "kind": "click",
+      "text": null,
+      "operation": "CLICK",
+      "elapsed_ms": 5554,
+      "executed_ms": 5074
+    },
+    {
+      "step": 11,
+      "action": "Wait for the page to update",
+      "kind": "wait",
+      "text": null,
+      "operation": "WAIT",
+      "elapsed_ms": 6353,
+      "executed_ms": 6022
+    }
+  ],
+  "verification": {
+    "passed": true,
+    "checks": {
+      "search_page": true,
+      "one_way": true,
+      "origin": true,
+      "destination": true,
+      "adults": true,
+      "economy": true,
+      "date": true,
+      "year": true,
+      "results": true
+    },
+    "visible_flights": [
+      "From 426 Hong Kong dollars.This price does not include overhead bin access. Nonstop flight with easyJet. Leaves Zurich Airport at 11:10 AM on Tuesday, October 20 and arrives at London Gatwick Airport at 11:55 AM on Tuesday, October 20. Total duration 1 hr 45 min.   Select flight",
+      "From 682 Hong Kong dollars. Nonstop flight with British Airways. Leaves Zurich Airport at 4:25 PM on Tuesday, October 20 and arrives at Heathrow Airport at 5:10 PM on Tuesday, October 20. Total duration 1 hr 45 min.   Select flight",
+      "From 942 Hong Kong dollars.This price does not include overhead bin access. Nonstop flight with SWISS. Leaves Zurich Airport at 10:30 AM on Tuesday, October 20 and arrives at Heathrow Airport at 11:20 AM on Tuesday, October 20. Total duration 1 hr 50 min.   Select flight"
+    ]
+  },
+  "final_url": "https://www.google.com/travel/flights/search?tfs=CBwQAhojEgoyMDI2LTEwLTIwagcIARIDWlJIcgwIAxIIL20vMDRqcGxAAUgBcAGCAQsI____________AZgBAg&hl=en",
+  "screenshot": "assets/flights-laya-20260926.jpg",
+  "note": "Selected fields from the recorded run; full local trace and intermediate failures are retained in artifacts. Prices are a historical observation, not current quotes."
+}

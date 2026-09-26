@@ -100,6 +100,16 @@ TEXT_MODEL=gemma4:latest
 
 ## Demos
 
+### Verified example: Google Flights with local Laya
+
+**Zürich → London, one-way, October 20, 2026, one adult in economy.** The recorded run completed in 6.631 seconds with 11 local Laya calls and nine independent checks. It used a saved GPT plan from a Codex conversation, with no text-model API calls during execution; timing excludes planning, model loading and initial navigation.
+
+[Run this example and inspect its evidence →](docs/flights-example.md)
+
+![Actual Google Flights result from the local Laya run](docs/assets/flights-laya-20260926.jpg)
+
+Recorded September 26, 2026; displayed fares are historical. This is one development task, not a general reliability benchmark.
+
 | Scenario | Command |
 | --- | --- |
 | Google Flights (checks the final page) | `uv run --env-file .env python examples/flights.py --date 2026-10-20 --keep-open` |
