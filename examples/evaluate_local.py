@@ -35,13 +35,27 @@ CASES = {
     "research": ("http://127.0.0.1:8770/fixture.html?scenario=research",
                  "Open the article about using finite choices to control browser agents."),
     "wikipedia": ("https://en.wikipedia.org/", "Open the article Gödel's incompleteness theorems."),
+    "copenhagen": ("http://127.0.0.1:8770/fixture.html?scenario=travel",
+                   "Find a Design stay in Copenhagen with Free cancellation and open The Glasshouse."),
+    "nature": ("http://127.0.0.1:8770/fixture.html?scenario=travel",
+               "Find a Nature stay in Lisbon. Do not enable Free cancellation. Open Serra Lodge."),
+    "article_zh": ("http://127.0.0.1:8770/fixture.html?scenario=research",
+                   "打开那篇解释为什么高置信度不代表结果正确的文章。请阅读文章正文，不要停在文章列表。"),
+    "article_en": ("http://127.0.0.1:8770/fixture.html?scenario=research",
+                   "Open the article Confidence is not correctness. Stop on the article body."),
+    "python_docs": ("https://docs.python.org/3/tutorial/index.html",
+                    "Open the Data Structures chapter of the Python tutorial. Stop when the chapter itself is open."),
+    "changed_route": ("http://127.0.0.1:8770/fixture-zh.html",
+                      "查询2026年12月8日从北京到天津的单程车票，结果包含中转。看到匹配车次后停止。"),
+    "uncheck_existing": ("http://127.0.0.1:8770/fixture-zh.html",
+                         "查找2026年12月8日从北京到天津的单程车票，只看直达。看到车次后停止。"),
     "flights": ("https://www.google.com/travel/flights?hl=en", flight_goal(DAY)),
 }
 
 
 def verify(name, browser, page):
     """Checks read the final page independently of the policy's plan or DONE choice."""
-    if name == "zh":
+    if name in {"zh", "changed_route", "uncheck_existing"}:
         observed = browser.evaluate("""(() => ({
           from: document.querySelector('#from')?.value,
           to: document.querySelector('#to')?.value,
@@ -50,17 +64,38 @@ def verify(name, browser, page):
           direct: document.querySelector('#direct')?.checked,
           rows: [...document.querySelectorAll('#results article')].map(e => e.innerText)
         }))()""")
-        checks = {key: observed.get(key) == value for key, value in {
-            "from": "杭州", "to": "上海", "date": "2026年10月20日", "trip": "单程", "direct": True,
-        }.items()}
+        expected = ({"from": "杭州", "to": "上海", "date": "2026年10月20日", "trip": "单程", "direct": True}
+                    if name == "zh" else
+                    {"from": "北京", "to": "天津", "date": "2026年12月8日", "trip": "单程", "direct": False})
+        checks = {key: observed.get(key) == value for key, value in expected.items()}
+        terms = [expected[k] for k in ("from", "to", "date", "trip")]
+        terms.append("直达" if expected["direct"] else "包含中转")
         checks["results"] = len(observed["rows"]) == 3 and all(
-            all(word in row for word in ("杭州", "上海", "2026年10月20日", "单程", "直达"))
+            all(word in row for word in terms)
             for row in observed["rows"]
         )
         return {"passed": all(checks.values()), "checks": checks, "observed": observed}
     if name == "flights":
         return verify_flights(page, DAY)
     text = browser.evaluate("document.body.innerText")
+    if name in {"copenhagen", "nature"}:
+        title, city, category, cancellation = (("The Glasshouse", "Copenhagen", "Design", "enabled")
+                                               if name == "copenhagen" else
+                                               ("Serra Lodge", "Lisbon", "Nature", "off"))
+        checks = {"detail": page["title"] == title + " · Forma",
+                  "destination": "Destination " + city in text,
+                  "category": "Your filters: " + category in text,
+                  "cancellation": "Free cancellation " + cancellation in text}
+        return {"passed": all(checks.values()), "checks": checks}
+    if name in {"article_zh", "article_en"}:
+        checks = {"article": page["title"] == "Confidence is not correctness · Forma",
+                  "body": "End of article" in text and "Measure the complete loop" in text}
+        return {"passed": all(checks.values()), "checks": checks}
+    if name == "python_docs":
+        checks = {"url": urlparse(page["url"]).path == "/3/tutorial/datastructures.html",
+                  "heading": "Data Structures" in (browser.evaluate("document.querySelector('h1')?.innerText") or ""),
+                  "body": "list.append(x)" in text and "list.extend(iterable)" in text}
+        return {"passed": all(checks.values()), "checks": checks}
     checks = {
         "travel": {
             "detail": page["title"] == "Casa Flora · Forma",
@@ -98,6 +133,20 @@ def main():
                 state = agent.command("tick")
                 if state["status"] in {"done", "blocked"}:
                     break
+            if name == "uncheck_existing":
+                if not agent.browser.evaluate("document.querySelector('#direct').checked"):
+                    raise AssertionError("Setup did not produce a checked box")
+                (folder / "toggle_setup.json").write_text(json.dumps(agent.snapshot(), ensure_ascii=False, indent=2))
+                from laya_ultrafast.laya import LayaPolicy
+                goal = "保持北京到天津、2026年12月8日、单程，把已经勾选的仅看直达取消，重新搜索，结果应包含中转。"
+                agent.policy = LayaPolicy(goal)
+                agent.pending_text = None
+                agent.state.update(goal=goal, plan=[goal], plan_index=0, status="ready", history=[], decisions=[],
+                                   text_calls=[], decision=None, started_at=None, elapsed_ms=0)
+                agent.state.pop("goal_plan", None)
+                for _ in range(args.max_steps):
+                    if agent.command("tick")["status"] in {"done", "blocked"}:
+                        break
             state = agent.snapshot()
             verification = verify(name, agent.browser, state["page"])
             result.update(

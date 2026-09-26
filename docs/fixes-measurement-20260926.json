@@ -1,0 +1,266 @@
+{
+  "date": "2026-09-26",
+  "models": {
+    "decision": "aac6fef/laya-multilingual-mlx",
+    "planner": "mlx-community/Qwen3-1.7B-4bit",
+    "thinking": false
+  },
+  "scope": "one final bounded run per scenario after iterative fixture-driven development; not a held-out benchmark",
+  "max_steps": 24,
+  "screenshots": false,
+  "results": [
+    {
+      "scenario": "zh",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 3351,
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "from": true,
+          "to": true,
+          "date": true,
+          "trip": true,
+          "direct": true,
+          "results": true
+        },
+        "observed": {
+          "from": "杭州",
+          "to": "上海",
+          "date": "2026年10月20日",
+          "trip": "单程",
+          "direct": true,
+          "rows": [
+            "杭州 08:15 → 上海 10:02\n2026年10月20日 · 单程 · 直达 · G7312\n¥168",
+            "杭州 10:44 → 上海 12:31\n2026年10月20日 · 单程 · 直达 · G7546\n¥176",
+            "杭州 14:06 → 上海 15:58\n2026年10月20日 · 单程 · 直达 · G7398\n¥159"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "travel",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 2189,
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "detail": true,
+          "destination": true,
+          "category": true,
+          "cancellation": true
+        }
+      }
+    },
+    {
+      "scenario": "research",
+      "verified": true,
+      "status": "done",
+      "actions": 1,
+      "elapsed_ms": 952,
+      "laya_calls": 1,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "article": true,
+          "body": true
+        }
+      }
+    },
+    {
+      "scenario": "copenhagen",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 2134,
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "detail": true,
+          "destination": true,
+          "category": true,
+          "cancellation": true
+        }
+      }
+    },
+    {
+      "scenario": "nature",
+      "verified": true,
+      "status": "done",
+      "actions": 5,
+      "elapsed_ms": 1985,
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "detail": true,
+          "destination": true,
+          "category": true,
+          "cancellation": true
+        }
+      }
+    },
+    {
+      "scenario": "article_zh",
+      "verified": true,
+      "status": "done",
+      "actions": 1,
+      "elapsed_ms": 1735,
+      "laya_calls": 1,
+      "planner_calls": 2,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "article": true,
+          "body": true
+        }
+      }
+    },
+    {
+      "scenario": "article_en",
+      "verified": true,
+      "status": "done",
+      "actions": 1,
+      "elapsed_ms": 1986,
+      "laya_calls": 1,
+      "planner_calls": 2,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "article": true,
+          "body": true
+        }
+      }
+    },
+    {
+      "scenario": "changed_route",
+      "verified": true,
+      "status": "done",
+      "actions": 5,
+      "elapsed_ms": 2986,
+      "laya_calls": 4,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "from": true,
+          "to": true,
+          "date": true,
+          "trip": true,
+          "direct": true,
+          "results": true
+        },
+        "observed": {
+          "from": "北京",
+          "to": "天津",
+          "date": "2026年12月8日",
+          "trip": "单程",
+          "direct": false,
+          "rows": [
+            "北京 08:15 → 天津 10:02\n2026年12月8日 · 单程 · 包含中转 · G7312\n¥168",
+            "北京 10:44 → 天津 12:31\n2026年12月8日 · 单程 · 包含中转 · G7546\n¥176",
+            "北京 14:06 → 天津 15:58\n2026年12月8日 · 单程 · 包含中转 · G7398\n¥159"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "uncheck_existing",
+      "verified": true,
+      "status": "done",
+      "actions": 2,
+      "elapsed_ms": 3012,
+      "laya_calls": 4,
+      "planner_calls": 1,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "from": true,
+          "to": true,
+          "date": true,
+          "trip": true,
+          "direct": true,
+          "results": true
+        },
+        "observed": {
+          "from": "北京",
+          "to": "天津",
+          "date": "2026年12月8日",
+          "trip": "单程",
+          "direct": false,
+          "rows": [
+            "北京 08:15 → 天津 10:02\n2026年12月8日 · 单程 · 包含中转 · G7312\n¥168",
+            "北京 10:44 → 天津 12:31\n2026年12月8日 · 单程 · 包含中转 · G7546\n¥176",
+            "北京 14:06 → 天津 15:58\n2026年12月8日 · 单程 · 包含中转 · G7398\n¥159"
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "python_docs",
+      "verified": false,
+      "status": "blocked",
+      "actions": 3,
+      "elapsed_ms": 2249,
+      "laya_calls": 10,
+      "planner_calls": 1,
+      "verification": {
+        "passed": false,
+        "checks": {
+          "url": false,
+          "heading": false,
+          "body": false
+        }
+      }
+    },
+    {
+      "scenario": "wikipedia",
+      "verified": false,
+      "status": "blocked",
+      "actions": 4,
+      "elapsed_ms": 5602,
+      "laya_calls": 12,
+      "planner_calls": 1,
+      "verification": {
+        "passed": false,
+        "checks": {
+          "article": false,
+          "body": false
+        }
+      }
+    },
+    {
+      "scenario": "flights",
+      "verified": false,
+      "status": "blocked",
+      "actions": 21,
+      "elapsed_ms": 8637,
+      "laya_calls": 15,
+      "planner_calls": 1,
+      "verification": {
+        "passed": false,
+        "checks": {
+          "search_page": false,
+          "one_way": true,
+          "origin": false,
+          "destination": true,
+          "date": true,
+          "year": true,
+          "results": false
+        },
+        "visible_flights": []
+      }
+    }
+  ]
+}

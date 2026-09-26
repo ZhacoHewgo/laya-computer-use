@@ -3,6 +3,7 @@
 import base64
 import os
 import time
+from copy import deepcopy
 from pathlib import Path
 
 from .browser import Browser, StalePage
@@ -85,8 +86,10 @@ class Agent:
                 planned = policy.plan is not None
                 state["decision"] = policy.choose(state["page"], state["history"])
                 if not planned:
-                    state["goal_plan"] = policy.plan
-                    state["text_calls"].append({**policy.plan_meta, "field": "goal plan", "value": policy.plan})
+                    state["goal_plan"] = deepcopy(policy.initial_plan)
+                    state["text_calls"].append(
+                        {**policy.plan_meta, "field": "goal plan", "value": deepcopy(policy.initial_plan)}
+                    )
             else:
                 state["decision"] = choose(state["page"], state["goal"], state["history"])
             state["decisions"].append(

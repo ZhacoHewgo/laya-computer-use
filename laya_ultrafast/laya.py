@@ -11,6 +11,7 @@ import os
 import re
 import time
 import unicodedata
+from copy import deepcopy
 from urllib.parse import urlparse
 
 from .model import plan_goal, validate_choice
@@ -135,6 +136,8 @@ def observed(page):
                 "checked": action.get("checked"),
                 "expanded": action.get("expanded"),
                 "hint": action.get("hint", ""),
+                "form": action.get("form"),
+                "is_submit": action.get("is_submit", False),
                 "actions": {},
                 "options": [],
             }
@@ -258,23 +261,29 @@ class LayaPolicy:
     def __init__(self, goal):
         self.goal = goal
         self.plan = None
+        self.initial_plan = None
         self.plan_meta = None
         self.fields = {}  # requirement index -> observed node
         self.met = set()
         self.attempts = {}
         self.pending = None  # the latest decision, until history shows it executed
         self.last = None  # the latest executed step
+        self.item_step = None  # retain the selected item across read-only loading waits
         self.edit_url = None
         self.submitted = False
         self.waits = 0
         self.seen = 0
         self.tried = {}  # label -> times clicked as the next step
-        self.typed = False  # text entered since the last submit
+        self.typed = False  # controls changed since the last acknowledged submit
         self.acted = None
         self.search_added = False
         self.frozen = set()  # requirements submitted to an earlier page
         self.failed = {}  # node -> decisions on it that could not execute
         self.before_submit_lines = set()
+        self.before_submit_nodes = set()
+        self.submit_url = None
+        self.awaiting_submit = False
+        self.dirty_forms = set()
 
     # Bookkeeping ---------------------------------------------------------------------------------------------
 
@@ -285,15 +294,23 @@ class LayaPolicy:
             self.failed[step["node"]] = self.failed.get(step["node"], 0) + 1
         if len(history) > self.seen and step and history[-1].get("choice") == step["choice"]:
             self.last = step
+            if step["kind"] == "item":
+                self.item_step = step
+            elif step["kind"] != "wait":
+                self.item_step = None
             if step["kind"] == "submit":
                 self.before_submit_lines = step["visible_lines"]
+                self.before_submit_nodes = step["before"]
+                self.submit_url = step["url"]
+                self.awaiting_submit = True
             if step["req"] is not None:
                 self.attempts[step["req"]] = self.attempts.get(step["req"], 0) + 1
                 self.edit_url, self.submitted = step["url"], False
-            if step["kind"] == "fill":
+            if step["kind"] in {"fill", "select", "toggle", "pick"}:
                 self.typed = True
-            if step["kind"] in {"submit", "item"}:
-                self.submitted = True
+                self.submitted = False
+                if step.get("form") is not None:
+                    self.dirty_forms.add(step["form"])
             if step["kind"] in {"submit", "item", "next"}:
                 self.tried[step["label"]] = self.tried.get(step["label"], 0) + 1
             self.waits = self.waits + 1 if step["kind"] == "wait" else 0
@@ -337,16 +354,16 @@ class LayaPolicy:
     def choose(self, page, history):
         started = time.perf_counter()
         self.sync(history)
-        if self.edit_url and location(page["url"]) != location(self.edit_url):
-            # The form was submitted to a new page. Its values were used; a new page's empty copy of the
-            # form (a site-wide search box, say) does not undo them.
-            self.typed = False
-            self.frozen |= self.met
         elements = observed(page)
         if self.plan is None:
             # Action buttons are not fields. Offering them to a small planner caused invented requirements.
             labels = list(dict.fromkeys(display(e) for e in elements if is_field(e)))
-            self.plan, self.plan_meta = plan_goal(self.goal, labels)
+            items = list(dict.fromkeys(
+                e["label"] for e in elements if "click" in e["actions"] and not is_field(e)
+                and not e["is_submit"] and not is_submit_label(e["label"])
+            ))
+            self.plan, self.plan_meta = plan_goal(self.goal, labels, items=items)
+            self.initial_plan = deepcopy(self.plan)
         self.answers, self.questions, self.tokens = {}, {}, 0
         self.model_calls = 0
         op, element, action, picked, kind, req, text = self.decide(page, elements)
@@ -362,6 +379,7 @@ class LayaPolicy:
             "url": page["url"], "before": {e["node"] for e in elements},
             "label": element["label"] if element else None,
             "visible_lines": {line.strip() for line in page["text"].splitlines()},
+            "form": element.get("form") if element else None,
         }
         return {
             "choice": choice,
@@ -380,7 +398,7 @@ class LayaPolicy:
             "model": os.environ.get("LAYA_MODEL", DEFAULT_MODEL),
             "usage": {"input_tokens": self.tokens, "output_tokens": 0, "model_calls": self.model_calls},
             "latency_ms": round((time.perf_counter() - started) * 1000),
-            "request": {"plan": self.plan, "questions": self.questions},
+            "request": {"plan": deepcopy(self.plan), "questions": self.questions},
         }
 
     def decide(self, page, elements):
@@ -389,6 +407,21 @@ class LayaPolicy:
         by_node = {e["node"]: e for e in elements}
         clickable = [e for e in elements if "click" in e["actions"] and self.failed.get(e["node"], 0) < 2]
         last = self.last
+
+        if self.awaiting_submit:
+            # A click is not acknowledgement. Wait for read-only evidence before any further mutation.
+            wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
+            new_lines = {line.strip() for line in page["text"].splitlines()} - self.before_submit_lines
+            applied = location(page["url"]) != location(self.submit_url) or any(
+                words(line) & wanted for line in new_lines
+            )
+            if not applied:
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
+            self.awaiting_submit, self.typed, self.submitted = False, False, True
+            self.dirty_forms.clear()
+            if location(page["url"]) != location(self.submit_url):
+                self.frozen |= self.met
 
         # 1. A typed query or an opened control offers new choices: take the one its requirement asks for.
         if last and last["kind"] in {"fill", "open"} and last["req"] is not None:
@@ -414,7 +447,8 @@ class LayaPolicy:
         # 2. Requirements in the goal's order: map each to an observed element, then check its value.
         if reqs and not any(plannable(e) for e in elements):
             # Nothing to fill yet: the page is still loading or showing an interstitial. This costs no attempt.
-            return "WAIT", None, None, None, "wait", None, None
+            op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+            return op, None, None, None, op.lower(), None, None
         self.refresh(page, elements, by_node)
         for i, r in enumerate(reqs):
             if i in self.met:
@@ -459,16 +493,32 @@ class LayaPolicy:
                 return "SELECT", e, option, (e, answer), "select", i, None
             return "CLICK", e, e["actions"]["click"], None, "toggle" if e["role"] in TOGGLES else "open", i, None
 
-        # 3. Everything stated is set. Check the finish condition once something was submitted or navigated.
+        # Filled controls are not yet applied. Only submit controls may be offered here, even if a detail
+        # button happens to have a higher Laya score. Keep native form associations when available.
+        if self.typed:
+            buttons = [e for e in clickable if e["role"] == "button"
+                       and (e["is_submit"] or is_submit_label(e["label"]))
+                       and (not self.dirty_forms or e["form"] is None or e["form"] in self.dirty_forms)]
+            associated = [e for e in buttons if e["is_submit"] and e["form"] in self.dirty_forms]
+            buttons = associated or buttons
+            picked = self.pick("submit", buttons, f"Goal: {self.goal}",
+                               "Which button applies the filled search/filter form?", "")
+            if picked:
+                return self.click(picked, "submit", None)
+            return "BLOCKED", None, None, None, "blocked", None, None
+
+        # 3. Everything stated is applied. Check the finish condition.
         finish = self.plan["finish"]
         navigated = self.edit_url is not None and location(page["url"]) != location(self.edit_url)
         if item:
             # An opened item names its page. Accept its title when it carries the item's words, or the words
             # of the element Laya chose to open it.
-            item_words = words(item)
-            chosen = (last and last["kind"] == "item" and item_words
-                      and len(words(last["label"]) & item_words) >= min(2, len(item_words))
-                      and titled(page["title"], last["label"]))
+            # Laya may resolve a paraphrase or another language to an observed label. Confirm that
+            # label dominates the destination title, not just a generic navigation word like "Flights".
+            opened = self.item_step or (last if last and last["kind"] == "item" else None)
+            chosen = (opened
+                      and len(words(opened["label"]) & words(page["title"])) >= 0.6 * len(words(page["title"]))
+                      and titled(page["title"], re.sub(r"^(?:view|read|open)\s+", "", opened["label"], flags=re.I)))
             if chosen or titled(page["title"], item):
                 return "DONE", None, None, None, "done", None, None
         elif self.submitted or navigated or not reqs:
@@ -486,7 +536,7 @@ class LayaPolicy:
             # Laya rarely labels a real results page as one, so also count visible result evidence that names
             # the requested values: two or more lines or elements mentioning at least three of them.
             wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
-            matching = [e for e in clickable if wanted and e["node"] not in (last or {}).get("before", set())
+            matching = [e for e in clickable if wanted and e["node"] not in self.before_submit_nodes
                         and len(words(e["label"]) & wanted) >= min(3, len(wanted))]
             matching_lines = [
                 line for line in page["text"].splitlines()
@@ -509,24 +559,22 @@ class LayaPolicy:
         # A next-step target clicked twice already has shown it does not advance the goal.
         candidates = [e for e in clickable if e["node"] not in mapped and self.tried.get(e["label"], 0) < 2]
 
-        def submits(e):
-            return 2 * is_submit_label(e["label"]) + (e["node"] in fresh)
-
         state = f"Goal: {self.goal}\nFinish condition: {finish}\nPage title: {page['title']}\nPage: {page['text']}"
-        if self.typed:
-            # Typed search text is not applied until its form is submitted, so submit before opening results.
-            buttons = [e for e in candidates if e["role"] == "button"]
-            picked = self.pick("submit", buttons, state, "Which button submits the filled form?", "",
-                               bonus=submits, top_tier=True)
-            if picked:
-                return self.click(picked, "submit", None)
         if item:
             named = [e for e in candidates if relevance(e, item) and not is_field(e)]
             # Near-duplicates ("completeness" vs "incompleteness") fooled Laya, so only the elements naming
             # the most of the item's words stay; Laya breaks exact ties.
             picked = self.pick("item", named, state, f"Which element opens {item}?", item, top_tier=True, margin=0)
+            if not named:
+                # Lexical matching cannot bridge languages. Ask the multilingual choice model using
+                # the original request; it may decline when no observed item matches.
+                items = [e for e in candidates if not is_field(e) and not is_submit_label(e["label"])]
+                picked = self.pick("item", items, f"User request: {self.goal}",
+                                   "Which visible item matches the item the user wants to open?", self.goal,
+                                   allow_none=True)
             if picked:
                 return self.click(picked, "item", None)
+            return "BLOCKED", None, None, None, "blocked", None, None
         # Otherwise click what the goal names: the elements sharing the most words with it; Laya breaks ties.
         picked = self.pick("next", candidates, state, "Which element should be clicked next to reach the goal?",
                            f"{self.goal} {finish}", bonus=lambda e: e["node"] in fresh, top_tier=True, margin=0)

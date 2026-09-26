@@ -101,6 +101,134 @@ def test_typed_text_is_submitted_before_opening_a_result(fake):
     assert (d["operation"], d["choice"]) == ("CLICK", "e3")  # Find stays, not View Casa Flora
 
 
+def test_wrong_detail_button_is_never_offered_as_submit(fake):
+    fake.prefer = lambda _qid, criteria: next(reversed(criteria))
+    p, history = policy(), []
+    executed(history, p.choose(page(FORM), history))
+    filled = [
+        dict(a, value="Lisbon") if a.get("node") == 1 else dict(a, node=4) if a.get("node") == 3 else a
+        for a in FORM
+    ]
+    d = p.choose(page(filled), history)
+    assert d["choice"] == "e3"
+    assert set(d["request"]["questions"]["submit"]["criteria"]) == {"2"}
+
+
+def test_no_detail_open_until_submit_has_observed_effect(fake):
+    p, history = policy(), []
+    executed(history, p.choose(page(FORM), history))
+    filled = [dict(a, value="Lisbon") if a.get("node") == 1 else a for a in FORM]
+    executed(history, p.choose(page(filled), history))
+    for _ in range(laya.MAX_RESULT_WAITS):
+        d = p.choose(page(filled), history)
+        assert d["operation"] == "WAIT"
+        executed(history, d)
+    assert p.choose(page(filled), history)["operation"] == "BLOCKED"
+
+
+def test_planner_receives_visible_titles_for_cross_language_resolution(fake, monkeypatch):
+    planner = Mock(return_value=(PLAN, {}))
+    monkeypatch.setattr(laya, "plan_goal", planner)
+    laya.LayaPolicy("打开关于置信度的文章").choose(page(FORM), [])
+    assert "View Casa Flora" in planner.call_args.kwargs["items"]
+
+
+@pytest.mark.parametrize("item", ["车次结果", "results", "搜索结果", "matching flight options"])
+def test_generic_results_are_not_items_to_open(item):
+    plan, meta = model.parse_plan({"requirements": [{"what": "city", "value": "Porto"}],
+                                   "open": item, "finish": "Results visible."}, {})
+    assert plan["open"] is None
+    assert meta["plan_adjustments"]
+
+
+def test_named_result_article_is_preserved():
+    plan, _ = model.parse_plan({"requirements": [], "open": "Search results explained",
+                                "finish": "Article open."}, {})
+    assert plan["open"] == "Search results explained"
+
+
+def test_planner_rejects_article_as_a_field_and_records_retry(monkeypatch):
+    wrong = {"requirements": [{"what": "article title", "value": "Memory leaks"}],
+             "open": "Memory leaks", "finish": "Article body visible."}
+    right = {"requirements": [], "open": "Memory leaks", "finish": "Article body visible."}
+    chat = Mock(side_effect=[(wrong, {}), (right, {})])
+    monkeypatch.setattr(model, "chat_json", chat)
+    plan, meta = model.plan_goal("Open Memory leaks", items=["Memory leaks"])
+    assert plan == right and meta["model_calls"] == 2
+    assert len(meta["responses"]) == 2
+    assert "validation_error" in chat.call_args.args[1]
+
+
+def test_observed_button_prefix_is_removed_from_item_title(monkeypatch):
+    raw = {"requirements": [], "open": "View Mountain House", "finish": "Detail open."}
+    monkeypatch.setattr(model, "chat_json", Mock(return_value=(raw, {})))
+    plan, meta = model.plan_goal("Open Mountain House", items=["View Mountain House"])
+    assert plan["open"] == "Mountain House"
+    assert meta["responses"][0]["output"]["open"] == "View Mountain House"
+    assert meta["plan_adjustments"][0]["from"] == "View Mountain House"
+
+
+def test_submit_prefers_the_form_that_was_edited(fake):
+    p, history = policy(), []
+    form = [{**a, "form": 90} if a.get("node") in {1, 2} else a for a in FORM]
+    form[2] = {**form[2], "is_submit": True}
+    executed(history, p.choose(page(form), history))
+    filled = [dict(a, value="Lisbon") if a.get("node") == 1 else a for a in form]
+    filled.append({"id": "other", "kind": "click", "node": 99, "role": "button", "label": "Search site"})
+    d = p.choose(page(filled), history)
+    assert set(d["request"]["questions"]["submit"]["criteria"]) == {"2"}
+
+
+def test_recorded_decision_plan_is_not_changed_by_later_search(fake):
+    p = policy({"requirements": [], "open": "Memory leaks", "finish": "Article body visible."})
+    actions = [{"id": "item", "kind": "click", "node": 50, "role": "link", "label": "Memory leaks"}]
+    first = p.choose(page(actions), [])
+    p.choose(page(FORM), [])  # Search requirement is added only to the working plan.
+    assert first["request"]["plan"]["requirements"] == []
+    assert p.plan["requirements"] == [{"what": "search", "value": "Memory leaks"}]
+
+
+def test_initial_plan_excludes_search_added_on_the_first_decision(fake, monkeypatch):
+    plan = {"requirements": [], "open": "Memory leaks", "finish": "Article open."}
+    monkeypatch.setattr(laya, "plan_goal", Mock(return_value=(plan, {})))
+    p = laya.LayaPolicy("Open Memory leaks")
+    p.choose(page(FORM), [])
+    assert p.initial_plan["requirements"] == []
+    assert p.plan["requirements"] == [{"what": "search", "value": "Memory leaks"}]
+
+
+def test_semantic_item_selection_uses_original_goal_and_observed_candidates(fake):
+    p = policy({"requirements": [], "open": "规划器的不同表述", "finish": "Article body open."})
+    p.goal = "打开解释置信度与正确性的文章"
+    actions = [{"id": "item", "kind": "click", "node": 50, "role": "link",
+                "label": "Confidence is not correctness"}]
+    history = []
+    d = p.choose(page(actions), history)
+    assert d["choice"] == "item"
+    assert p.goal in fake.calls[-1][0]
+    assert "none" in d["request"]["questions"]["item"]["criteria"]
+    executed(history, d)
+    d = p.choose(page([], title="Confidence is not correctness · Site"), history)
+    assert d["operation"] == "DONE"
+
+
+@pytest.mark.parametrize("content", ['```json\n{"text":"Porto"}\n```', '{"text":"Porto"}\n```'])
+def test_json_wrappers_are_removed_without_guessing_content(monkeypatch, content):
+    monkeypatch.setenv("TEXT_MODEL_BASE_URL", "http://localhost:8771/v1")
+    monkeypatch.setattr(model, "post_json", Mock(return_value={"choices": [{"message": {"content": content}}]}))
+    output, meta = model.chat_json("test", {})
+    assert output == {"text": "Porto"} and meta["removed_json_fence"]
+
+
+def test_multiple_json_objects_are_rejected(monkeypatch):
+    monkeypatch.setenv("TEXT_MODEL_BASE_URL", "http://localhost:8771/v1")
+    monkeypatch.setattr(model, "post_json", Mock(return_value={
+        "choices": [{"message": {"content": '{"text":"Porto"} {"text":"Lisbon"}'}}],
+    }))
+    with pytest.raises(ValueError):
+        model.chat_json("test", {})
+
+
 def test_same_page_search_can_finish_from_visible_results(fake):
     p, history = policy({
         "requirements": [{"what": "Destination", "value": "Lisbon"}],

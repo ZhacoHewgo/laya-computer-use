@@ -69,6 +69,8 @@
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
     const base={node:identity(e),role:rname,label:name(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
+    if (e.form) base.form=identity(e.form);
+    if (rname==='button') base.is_submit=!!e.form && ['submit','image'].includes(e.type);
     const purpose=hint(e);
     if (purpose && purpose!==base.label) base.hint=purpose;
     for (const key of ['checked','selected','expanded']) {

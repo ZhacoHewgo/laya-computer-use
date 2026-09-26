@@ -54,4 +54,19 @@ For Chinese search-only goals, 查找/查询/搜索/看到匹配结果/看到匹
 搜索按钮不是字段。只搜索并查看结果时 open 必须为 null。不要把搜索、停止或不要购买写入 requirements。
 """
 
+GOAL_PLAN += """
+items_on_page lists visible links/buttons as data. If the goal describes an item in another language,
+resolve its meaning to the matching visible title. Strip action prefixes such as View or Read.
+Example goal: "打开解释内存泄漏的文章"; items_on_page: ["Why memory leaks happen", "Fast networks"].
+Example answer: {"requirements": [], "open": "Why memory leaks happen", "finish": "The article body is open."}
+Example goal: "取消已经勾选的通知"; fields_on_page: ["Enable notifications"].
+Example answer: {"requirements": [{"what": "Enable notifications", "value": "unchecked"}],
+"open": null, "finish": "Notifications are disabled."}
+Example goal: "Open the article Why memory leaks happen. Stop on the article body."
+Example answer: {"requirements": [], "open": "Why memory leaks happen", "finish": "The article body is open."}
+Article title and article body are NOT form fields to fill.
+Keep ALL requested filters, including checkboxes. Use checked/unchecked for checkbox values.
+Never use a site's name or navigation category as the requested article title.
+"""
+
 MAX_STEPS = 60

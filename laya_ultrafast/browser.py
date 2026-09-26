@@ -21,25 +21,39 @@ class Browser:
     def __init__(self, url):
         ensure_daemon()
         self.target = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
-        self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
-        self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
-        # Keep rAF/menus rendering in an owned background tab, without activating the user's Chrome tab.
-        self.call("Emulation.setFocusEmulationEnabled", enabled=True)
-        self.call("Page.navigate", url=url)
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if self.evaluate("document.readyState") == "complete":
-                break
-            time.sleep(0.02)
+        try:
+            self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
+            self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
+            self.call("Emulation.setFocusEmulationEnabled", enabled=True)
+            result = self.call("Page.navigate", url=url)  # Navigation is dispatched exactly once.
+            if result.get("errorText"):
+                raise RuntimeError(f"Browser navigation failed: {result['errorText']}")
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                try:
+                    ready = self.evaluate(
+                        "typeof document !== 'undefined' && document.readyState === 'complete'"
+                        " && document.body !== null && location.href !== 'about:blank'"
+                    )
+                    if ready:
+                        break
+                except StalePage:
+                    pass  # Only the read is retried while a navigation replaces its context.
+                time.sleep(0.05)
+            else:
+                raise TimeoutError("Browser navigation did not reach a readable document in 15 seconds")
+        except Exception as error:
+            try:
+                self.close()
+            except Exception as cleanup_error:
+                error.add_note(f"Closing the failed browser target also failed: {cleanup_error}")
+            raise
 
     def call(self, method, **params):
         return cdp(method, session_id=self.session, **params)
 
     def evaluate(self, expression):
-        response = self.call("Runtime.evaluate", expression=expression, returnByValue=True)
-        if response.get("exceptionDetails"):
-            raise StalePage("Document changed during evaluation")
-        return response.get("result", {}).get("value")
+        return evaluate_script(self.call, expression)
 
     def observe(self, screenshot=True):
         if getattr(self, "after_input", None):
@@ -74,15 +88,15 @@ class Browser:
                 )
             except RuntimeError:
                 pass
-        for attempt in range(10):
+        for attempt in range(50):
             try:
                 return browser_operation(
                     {"operation": "observe", "session": self.session, "screenshot": screenshot}
                 )
             except StalePage:
-                if attempt == 9:
+                if attempt == 49:
                     raise
-                time.sleep(0.02)
+                time.sleep(0.1)
         raise StalePage("Page did not settle")
 
     def fresh(self, page, action=None):
@@ -117,6 +131,26 @@ def fingerprint(state):
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
+def evaluate_script(call, expression, *, mutation=False):
+    """Keep genuine script errors; only interrupted reads can be observed again."""
+    try:
+        result = call("Runtime.evaluate", expression=expression, returnByValue=True)
+        if result.get("exceptionDetails"):
+            details = result["exceptionDetails"]
+            message = details.get("exception", {}).get("description") or details.get("text", "Unknown exception")
+            raise RuntimeError(f"Browser script failed: {message[:500]}")
+        return result.get("result", {}).get("value")
+    except RuntimeError as error:
+        if mutation:
+            raise RuntimeError(f"Dropdown execution was interrupted; inspect before retrying. {error}") from error
+        if any(message in str(error).lower() for message in (
+            "execution context was destroyed", "execution context destroyed", "cannot find context",
+            "inspected target navigated", "document is not defined",
+        )):
+            raise StalePage(str(error)) from error
+        raise
+
+
 def browser_operation(request):
     operation = request["operation"]
     session = request["session"]
@@ -125,12 +159,7 @@ def browser_operation(request):
         return cdp(method, session_id=session, **params)
 
     def evaluate(expression):
-        result = call("Runtime.evaluate", expression=expression, returnByValue=True)
-        if result.get("exceptionDetails"):
-            if operation == "act" and request["action"]["kind"] == "select":
-                raise RuntimeError("Dropdown execution was interrupted; inspect before retrying.")
-            raise StalePage("Document changed during evaluation")
-        return result.get("result", {}).get("value")
+        return evaluate_script(call, expression, mutation=operation == "act" and request["action"]["kind"] == "select")
 
     if operation == "act":
         action = request["action"]

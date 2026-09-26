@@ -60,7 +60,7 @@ uv run laya
 
 Open **http://127.0.0.1:8766**, choose a scenario, and click **Start demo → Run automatically**.
 
-For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. The fixture generates fictional results without login or purchases. A remote text planner would receive the task and field labels; use the local setup below to keep inference on your Mac.
+For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. The fixture generates fictional results without login or purchases. A remote text planner would receive the task, field labels and visible item labels; use the local setup below to keep inference on your Mac.
 
 ### Fully local visible demo / 完全本地演示
 
@@ -113,7 +113,7 @@ Flight sites only offer future dates, so pass `--date`. It defaults to 30 days a
 
 ## Upstream measurements (not re-measured results for this fork)
 
-For this fork's actual Apple M4 + local Qwen + multilingual Laya results, see [本地验证记录](docs/local-validation.md). Three local fixtures passed independent checks; Wikipedia and Google Flights did not pass in the final run.
+For this fork's actual Apple M4 + local Qwen + multilingual Laya results, see [最新修复与验证](docs/fixes-validation-20260926.md) and the [earlier baseline](docs/local-validation.md). The latest bounded run passed nine local scenarios; Python Docs, Wikipedia and Google Flights did not pass. These are development fixtures, not a general success-rate benchmark.
 
 The following numbers are retained from [ipenywis/laya-ultrafast](https://github.com/ipenywis/laya-ultrafast). They report an M1 Max with `inception/mercury-2.5` on OpenRouter. They do not measure this fork's Qwen or multilingual configuration:
 
