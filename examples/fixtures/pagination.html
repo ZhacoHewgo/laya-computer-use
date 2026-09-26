@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Article search</title>
+<style>body{font:18px system-ui;max-width:760px;margin:40px auto;background:#faf8f3;color:#243237}article{background:white;padding:20px;margin:14px 0;border:1px solid #ddd}a{color:#176d86}nav{padding:20px}h1{font-size:28px}</style>
+<main></main><div role="link" tabindex="0">Footer help</div>
+<script>
+const args=new URLSearchParams(location.search);
+const mode=['normal','delayed','cycle','suggestion','missing','namesake','wrong_author','mention','misleading_detail','inverted','author_collision','initials'].includes(args.get('mode')) ? args.get('mode') : 'normal';
+const main=document.querySelector('main');
+function render(number) {
+  const desired=number===3 && mode!=='missing' ? 'Memory Without Leaks' : `Different article ${number}`;
+  document.title='Article search';
+  main.innerHTML=`<h1>Article search</h1><p>Page ${number} · ${mode}</p><article><h2>${desired}</h2><p>Author: Example Researcher</p><a href="?article=memory">Open ${desired}</a></article>`;
+  if(number<3) {
+    const next=mode==='cycle' && number===2 ? 1 : number+1;
+    const nav=document.createElement('nav');nav.setAttribute('aria-label','Pagination');
+    const link=document.createElement('a');link.rel='next';link.href=`?page=${next}&mode=${mode}`;link.textContent='Next page';nav.append(link);main.append(nav);
+    if(mode==='delayed') link.addEventListener('click',event=>{event.preventDefault();setTimeout(()=>render(next),600)});
+  }
+}
+if(args.has('article')) {
+  document.title='Memory Without Leaks';
+  main.innerHTML='<h1>Memory Without Leaks</h1><p>Author: Example Researcher</p><p>This demonstration article explains how retained references prevent garbage collection. Release subscriptions and remove unused event listeners when their owners are destroyed. Verify the object lifecycle with repeated creation and cleanup rather than relying on one memory measurement.</p>';
+  if(args.get('article')==='mention') main.innerHTML+='<p>This article discusses work by Desired Researcher, who did not write this article.</p>';
+  if(args.get('article')==='inverted') main.innerHTML=main.innerHTML.replace('Example Researcher','Researcher, Desired, 1900-1980');
+  if(args.get('article')==='author_collision') main.innerHTML=main.innerHTML.replace('Author: Example Researcher','Authors: Other Desired, Researcher Else');
+  if(args.get('article')==='desired') main.innerHTML=main.innerHTML.replace('Example Researcher','Desired Researcher');
+} else if(['inverted','author_collision','initials'].includes(mode)) {
+  const byline=mode==='inverted' ? 'Author: Researcher, Desired, 1900-1980' : mode==='initials' ? 'Author: D. Researcher' : 'Authors: Other Desired, Researcher Else';
+  main.innerHTML='<h1>Article search</h1><article><h2>Memory Without Leaks</h2><p>'+byline+'</p><a href="?article='+mode+'">Open article</a></article>';
+} else if(mode==='mention' || mode==='misleading_detail') {
+  main.innerHTML='<h1>Article search</h1><article><h2>Memory Without Leaks</h2><p>Author: '+(mode==='mention' ? 'Example Researcher' : 'Desired Researcher')+'</p><p>This article discusses work by Desired Researcher.</p><a href="?article=mention">Open article</a></article>';
+} else if(mode==='wrong_author') {
+  main.innerHTML='<h1>Article search</h1><article><h2>Memory Without Leaks</h2><p>Author: Example Researcher</p><a href="?article=memory">Open article</a></article>';
+} else if(mode==='namesake') {
+  main.innerHTML='<h1>Article search</h1><article><h2>Memory Without Leaks</h2><p>Author: Example Researcher</p><a href="?article=memory">Open article</a></article><article><h2>Memory Without Leaks</h2><p>Author: Desired Researcher</p><a href="?article=desired">Open article</a></article>';
+} else if(mode==='suggestion') {
+  main.innerHTML='<h1>Article search</h1><label>Search <input type="search"></label><div id="suggestions"></div>';
+  main.querySelector('input').addEventListener('input',event=>{
+    const link=document.createElement('a');link.href='?article=memory';link.textContent=event.target.value;
+    document.querySelector('#suggestions').replaceChildren(link);
+  });
+} else render(Number(args.get('page')||1));
+</script></html>

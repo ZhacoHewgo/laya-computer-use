@@ -9,6 +9,42 @@
   const safe = e => !['password','file','hidden'].includes(e.type);
   const visible = e => !e.closest('[aria-hidden="true"],[inert]') &&
     e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
+  // Read visible bylines/author fields, not arbitrary mentions in an abstract or body.
+  const authorCache=new WeakMap();
+  const authorEvidence=root => {
+    if (authorCache.has(root)) return authorCache.get(root);
+    const evidence=[];
+    const eligible=e => visible(e) && !e.closest('nav,aside,footer') &&
+      (!e.closest('article') || e.closest('article')===root || e.closest('article').contains(root.querySelector('h1')));
+    for (const e of root.querySelectorAll('[rel~="author"],[itemprop~="author"],[class~="author"],[class~="authors"],[class~="byline"]')) {
+      const value=(e.innerText||'').trim();
+      if (eligible(e) && value && value.length<=400) {
+        const people=[...e.querySelectorAll('a')].filter(eligible);
+        if (people.length) for (const person of people) {
+          const value=person.innerText.trim();
+          if (value && value.length<=160) evidence.push({value,source:'author link',individual:true});
+        }
+        else evidence.push({value,source:'author markup',
+          individual:e.matches('[rel~="author"],[itemprop~="author"],[class~="author"]')});
+      }
+    }
+    for (const e of root.querySelectorAll('p,div,tr,dt')) {
+      if (!eligible(e) || e.querySelector('p,div,tr,dt')) continue;
+      const text=(e.innerText||'').trim();
+      const match=text.match(/^(?:authors?|作者|著者)\s*[:：]\s*([^\n]+(?:\n[^\n]+)*)$/i) ||
+        (e.tagName==='TR' ? text.match(/^(?:authors?|作者|著者)\s+([\s\S]+)$/i) : null);
+      if (match && match[1].length<=400) evidence.push({value:match[1].trim(),source:'author label',
+        individual:/^(?:author|作者|著者)(?:\s|[:：])/i.test(text)});
+      if (e.tagName==='DT' && /^(?:authors?|作者|著者)\s*[:：]?$/i.test(text)) {
+        const dd=e.nextElementSibling;
+        if (dd?.tagName==='DD' && eligible(dd) && dd.innerText.trim().length<=400)
+          evidence.push({value:dd.innerText.trim(),source:'author definition',individual:/^(?:author|作者|著者)\s*[:：]?$/i.test(text)});
+      }
+    }
+    const result=evidence.filter((v,i,a)=>a.findIndex(w=>w.value===v.value)===i).slice(0,16);
+    authorCache.set(root,result);
+    return result;
+  };
   const name = (e,seen=new Set()) => {
     if (!e || seen.has(e)) return '';
     seen.add(e);
@@ -73,6 +109,27 @@
     if (dialog) base.dialog=identity(dialog);
     if (e.form) base.form=identity(e.form);
     if (rname==='button') base.is_submit=!!e.form && ['submit','image'].includes(e.type);
+    if (rname==='link') {
+      base.href=typeof e.href==='string' ? e.href : '';
+      const pager=e.closest('nav,[role="navigation"],[class~="pagination"]');
+      const pagerName=pager ? (name(pager)+' '+pager.className+' '+pager.getAttribute('aria-label')) : '';
+      const nextLabel=/^(?:next(?:\s+page)?|下一页|下页)\s*[›»>→]*$/i.test(base.label.trim());
+      base.pagination_next=!!e.relList?.contains('next') ||
+        !!(pager && /pagination|page navigation|分页|翻页/i.test(pagerName) && nextLabel) ||
+        !!(nextLabel && /^(?:go to (?:the )?)?next page(?: of results)?[.!]?$/i.test(e.getAttribute('title')||''));
+      // Bind a link to its nearest semantic result card, never the whole page or navigation list.
+      const card=e.closest('article,li,[role="listitem"],tr,[role="row"]');
+      if (card && !card.closest('nav,header,footer')) {
+        const titles=[...card.querySelectorAll('h1,h2,h3,h4,[role="heading"],[class~="title"]')]
+          .filter(visible).map(n=>n.innerText.trim()).filter(Boolean);
+        if (titles.length===1) {
+          base.result_primary=card.querySelector('a[href]')===e;
+          base.result_title=titles[0].slice(0,240);
+          base.result_authors=authorEvidence(card);
+          base.result_context=card.innerText.replace(/\s+/g,' ').trim().slice(0,650);
+        }
+      }
+    }
     const purpose=hint(e);
     if (purpose && purpose!==base.label) base.hint=purpose;
     for (const key of ['checked','selected','expanded']) {
@@ -92,6 +149,10 @@
         e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';
       actions.push({...base,kind:editable?'fill':'click',value});
       if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});
+      // Some native search forms expose only a text input and rely on implicit Enter submission.
+      if (editable && e.tagName==='INPUT' && e.form &&
+          (e.type==='search' || /search|搜索|查询/i.test(base.label+' '+purpose)))
+        actions.push({...base,kind:'enter',value,label:'Submit '+base.label});
     }
   }
   // Open pickers sometimes list plain clickable items with no role (a trip-type menu of <li>s).
@@ -133,7 +194,12 @@
   actions.forEach((a,i)=>a.id='e'+(i+1));
   if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
   if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  if (history.length>1) actions.push({id:'back',kind:'back',label:'Return to the previous page'});
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
-  return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
+  const headings=[...document.querySelectorAll('h1')].filter(visible).map(e=>e.innerText.trim()).filter(Boolean);
+  const main=document.querySelector('main,[role="main"],article');
+  const main_text=main && visible(main) ? main.innerText.slice(0,12000) : text;
+  const authors=authorEvidence(main && visible(main) ? main : document.body);
+  return {authors,url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,headings,main_text,
     scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};
 })()

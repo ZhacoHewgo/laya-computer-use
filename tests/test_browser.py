@@ -60,3 +60,46 @@ def test_context_loss_during_select_is_not_retriable():
     with pytest.raises(RuntimeError, match="Dropdown execution.*Execution context"):
         browser.evaluate_script(call, "mutation", mutation=True)
     assert call.call_count == 1
+
+
+def test_search_enter_is_one_observed_keyboard_submission(monkeypatch):
+    def result(method, **kwargs):
+        return {"result": {"value": {"x": 10, "y": 20}}} if method == "Runtime.evaluate" else {}
+
+    call = Mock(side_effect=result)
+    monkeypatch.setattr(browser, "cdp", call)
+    browser.browser_operation({"operation": "act", "session": "s",
+                               "action": {"id": "enter", "node": 1, "kind": "enter"}})
+    keys = [c.kwargs for c in call.call_args_list if c.args[0] == "Input.dispatchKeyEvent"]
+    assert [(k["type"], k["key"]) for k in keys] == [("keyDown", "Enter"), ("keyUp", "Enter")]
+
+
+def test_enter_failure_is_not_retried(monkeypatch):
+    def result(method, **kwargs):
+        if method == "Input.dispatchKeyEvent":
+            raise RuntimeError("Connection interrupted")
+        return {"result": {"value": {"x": 10, "y": 20}}} if method == "Runtime.evaluate" else {}
+
+    call = Mock(side_effect=result)
+    monkeypatch.setattr(browser, "cdp", call)
+    with pytest.raises(RuntimeError, match="Connection interrupted"):
+        browser.browser_operation({"operation": "act", "session": "s",
+                                   "action": {"id": "enter", "node": 1, "kind": "enter"}})
+    assert sum(c.args[0] == "Input.dispatchKeyEvent" for c in call.call_args_list) == 1
+
+
+def test_back_uses_actual_history_entry_once(monkeypatch):
+    call = Mock(side_effect=[{"currentIndex": 1, "entries": [{"id": 11}, {"id": 20}]}, {}])
+    monkeypatch.setattr(browser, "cdp", call)
+    browser.browser_operation({"operation": "act", "session": "s", "action": {"id": "back", "kind": "back"}})
+    assert call.call_args.args == ("Page.navigateToHistoryEntry",)
+    assert call.call_args.kwargs["entryId"] == 11
+    assert call.call_count == 2
+
+
+def test_interrupted_back_is_not_replayed(monkeypatch):
+    call = Mock(side_effect=[{"currentIndex": 1, "entries": [{"id": 11}, {"id": 20}]}, RuntimeError("Disconnected")])
+    monkeypatch.setattr(browser, "cdp", call)
+    with pytest.raises(RuntimeError, match="Disconnected"):
+        browser.browser_operation({"operation": "act", "session": "s", "action": {"id": "back", "kind": "back"}})
+    assert call.call_count == 2

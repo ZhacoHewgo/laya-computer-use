@@ -283,7 +283,8 @@ def test_semantic_item_selection_uses_original_goal_and_observed_candidates(fake
     assert p.goal in fake.calls[-1][0]
     assert "none" in d["request"]["questions"]["item"]["criteria"]
     executed(history, d)
-    d = p.choose(page([], title="Confidence is not correctness · Site"), history)
+    d = p.choose(page([], title="Confidence is not correctness · Site",
+                      text="Article body with supporting evidence. " * 4), history)
     assert d["operation"] == "DONE"
 
 
@@ -322,7 +323,7 @@ def test_same_page_search_can_finish_from_visible_results(fake):
 
 def test_item_page_title_finishes_the_goal(fake):
     p = policy({"requirements": [], "open": "Casa Flora", "finish": "Casa Flora is open."})
-    d = p.choose(page(FORM, title="Casa Flora · Forma"), [])
+    d = p.choose(page(FORM, title="Casa Flora · Forma", text="Accommodation details and rooms. " * 4), [])
     assert d["operation"] == "DONE" and d["choice"] == "DONE"
 
 
@@ -660,3 +661,472 @@ def test_open_dialog_blocks_done_even_with_matching_result_like_text(fake):
     p.submitted, p.acted = True, 'submit'
     actions = [{'id': 'done', 'kind': 'click', 'node': 4, 'role': 'button', 'dialog': 91, 'label': 'Done'}]
     assert p.choose(page(actions, text='Zurich London option A\nZurich London option B'), [])['operation'] == 'WAIT'
+
+
+def test_organization_title_is_not_repository_identity():
+    assert not laya.titled("Browser Use · GitHub", "browser-use/jev-ultrafast")
+    assert not laya.titled("Completeness", "Incompleteness")
+
+
+def test_title_without_body_does_not_finish(fake):
+    p = policy({"requirements": [], "open": "Casa Flora", "finish": "Details are visible."})
+    assert p.choose(page([], title="Casa Flora", text="Loading"), [])["operation"] != "DONE"
+
+
+def test_existing_search_requirement_is_not_duplicated(fake):
+    p = policy({"requirements": [{"what": "Search books", "value": "Pride and Prejudice by Jane Austen"}],
+                "open": "Pride and Prejudice", "finish": "Book details open."})
+    actions = [{"id": "q", "kind": "fill", "node": 1, "role": "searchbox", "label": "Search books"}]
+    assert p.choose(page(actions), [])["operation"] == "TYPE_TEXT"
+    assert len(p.plan["requirements"]) == 1
+
+
+def test_planner_sees_options_and_search_navigation(fake, monkeypatch):
+    planner = Mock(return_value=({"requirements": [], "open": "Paper", "finish": "Paper visible."}, {}))
+    monkeypatch.setattr(laya, "plan_goal", planner)
+    actions = [{"id": "s", "kind": "click", "node": 1, "role": "link", "label": "Search"},
+               {"id": "o", "kind": "select", "node": 2, "role": "combobox", "label": "Category → Physics",
+                "value": "physics"}]
+    laya.LayaPolicy("Find Paper").choose(page(actions), [])
+    assert "Search" in planner.call_args.kwargs["items"]
+    assert planner.call_args.kwargs["controls"][0]["options"]
+
+
+def test_duplicate_planner_fields_are_rejected(monkeypatch):
+    output = {"requirements": [{"what": "Search", "value": "A"}, {"what": "Search", "value": "B"}],
+              "open": "A", "finish": "Details."}
+    monkeypatch.setattr(model, "chat_json", Mock(return_value=(output, {})))
+    with pytest.raises(ValueError, match="only once"):
+        model.plan_goal("Find A", ["Search"], attempts=1)
+
+
+def test_repair_is_bounded_and_receives_failure_history(fake, monkeypatch):
+    plan = {"requirements": [], "open": "Missing title", "finish": "Body visible."}
+    planner = Mock(side_effect=lambda *a, **k: (dict(plan), {}))
+    monkeypatch.setattr(laya, "plan_goal", planner)
+    p = laya.LayaPolicy("Find Missing title")
+    history = []
+    for _ in range(8):
+        d = p.choose(page([]), history)
+        if d["operation"] == "BLOCKED":
+            break
+        executed(history, d)
+    assert d["operation"] == "BLOCKED"
+    assert planner.call_count == 3 and p.repairs == 2
+    assert planner.call_args.kwargs["feedback"]["history"]
+    assert len(p.planning_events) == 3
+
+
+def test_search_results_named_after_book_do_not_finish(fake):
+    p = policy({"requirements": [], "open": "Pride and Prejudice", "finish": "Book details."})
+    d = p.choose(page([], url="https://example.test/ebooks/search/?query=pride",
+                      title="Books: Pride and Prejudice", text="Displaying results 1–11\n" + "Book listing " * 20), [])
+    assert d["operation"] != "DONE"
+
+
+def test_navigation_disambiguates_search_link_from_submit_button(fake):
+    p = policy({"requirements": [], "open": "Paper", "finish": "Paper body.", "navigate": "Search"})
+    actions = [{"id": "nav", "kind": "click", "node": 1, "role": "link", "label": "Search"},
+               {"id": "submit", "kind": "click", "node": 2, "role": "button", "label": "Search", "is_submit": True}]
+    assert p.choose(page(actions), [])["choice"] == "nav"
+
+
+def test_dropdown_can_decline_an_unavailable_value(fake):
+    fake.prefer = lambda qid, criteria: "none" if qid.startswith("select_") else next(iter(criteria))
+    p = policy({"requirements": [{"what": "Category", "value": "Attention Is All You Need"}],
+                "open": "Attention Is All You Need", "finish": "Paper body."})
+    actions = [{"id": "a", "kind": "select", "node": 1, "role": "combobox",
+                "label": "Category → Physics", "value": "physics"},
+               {"id": "b", "kind": "select", "node": 1, "role": "combobox",
+                "label": "Category → Mathematics", "value": "mathematics"}]
+    assert p.choose(page(actions), [])["operation"] == "BLOCKED"
+
+
+def test_planner_cannot_invent_navigation_target(monkeypatch):
+    output = {"requirements": [], "open": "Paper", "finish": "Paper body.", "navigate": "Invented link"}
+    monkeypatch.setattr(model, "chat_json", Mock(return_value=(output, {})))
+    with pytest.raises(ValueError, match="observed"):
+        model.plan_goal("Find Paper", items=["Search"], attempts=1)
+
+
+def test_qualified_target_does_not_finish_on_child_page(fake):
+    p = policy({"requirements": [], "open": "org/project", "finish": "Project page."})
+    d = p.choose(page([], url="https://example.test/org/project/commit/123",
+                      title="org/project", text="A commit description and changed files. " * 5), [])
+    assert d["operation"] != "DONE"
+
+
+def test_observed_implicit_submit_is_used_when_button_absent(fake):
+    p = policy({"requirements": [], "open": "Paper", "finish": "Paper body."})
+    p.typed = True
+    p.dirty_forms = {12}
+    actions = [{"id": "q", "kind": "fill", "node": 1, "role": "searchbox", "label": "Search", "form": 12},
+               {"id": "enter", "kind": "enter", "node": 1, "role": "searchbox", "label": "Submit Search", "form": 12}]
+    p.search_added = True
+    assert p.choose(page(actions), [])["operation"] == "PRESS_ENTER"
+
+
+def test_item_navigation_preserves_completed_in_place_search(fake):
+    p = policy({"requirements": [{"what": "Search repositories", "value": "org/project"}],
+                "open": "org/project", "finish": "Repository body."})
+    p.submitted = True
+    p.submit_url = "https://example.test/org/repositories"
+    p.met = {0}
+    d = p.choose(page([], url="https://example.test/org/project", title="org/project",
+                      text="The project README, installation and usage. " * 5), [])
+    assert p.frozen == {0}
+    assert d["operation"] == "DONE"
+
+
+def test_paper_title_contained_in_different_paper_does_not_finish(fake):
+    p = policy({"requirements": [], "open": "Attention Is All You Need", "finish": "Paper body."})
+    current = page([], title="FAIR: Focused Attention Is All You Need for Generative Recommendation",
+                   text="A different paper with a different author and abstract. " * 5)
+    current["headings"] = [current["title"]]
+    assert p.choose(current, [])["operation"] != "DONE"
+
+
+def test_exact_result_card_beats_derivative_title(fake):
+    p = policy({"requirements": [], "open": "Attention Is All You Need", "finish": "Paper body."})
+    p.submitted = True
+    actions = [
+        {"id": "wrong", "kind": "click", "node": 1, "role": "link", "label": "paper:9999",
+         "result_title": "Focused Attention Is All You Need for Recommendation", "href": "https://test/wrong"},
+        {"id": "right", "kind": "click", "node": 2, "role": "link", "label": "paper:1234",
+         "result_title": "Attention Is All You Need", "result_context": "Authors: Example Author",
+         "href": "https://test/right"},
+        {"id": "pdf", "kind": "click", "node": 3, "role": "link", "label": "PDF",
+         "result_title": "Attention Is All You Need", "href": "https://test/right.pdf"},
+    ]
+    d = p.choose(page(actions), [])
+    assert d["choice"] == "right"
+    assert "Example Author" in str(d["request"]["questions"])
+
+
+def test_derivative_card_is_not_used_as_semantic_fallback(fake):
+    p = policy({"requirements": [], "open": "Attention Is All You Need", "finish": "Paper body."})
+    actions = [{"id": "wrong", "kind": "click", "node": 1, "role": "link", "label": "Attention Is All You Need again",
+                "result_title": "Attention Is All You Need again", "href": "https://test/wrong"}]
+    assert p.choose(page(actions), [])["operation"] == "BLOCKED"
+
+
+def test_wrong_item_can_return_only_with_observed_back_action(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.item_step = {"kind": "item", "label": "paper:12", "url": "https://test/search", "href": "https://test/wrong"}
+    current = page([{"id": "back", "kind": "back", "label": "Back"}],
+                   url="https://test/wrong", title="Another paper", text="Different paper body. " * 10)
+    current["headings"] = ["Another paper"]
+    assert p.choose(current, [])["operation"] == "BACK"
+    assert "https://test/wrong" in p.rejected_urls
+    p.backtracks = 2
+    assert p.choose(current, [])["operation"] != "BACK"
+
+
+def test_relevance_sort_uses_only_observed_option(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.submitted = True
+    actions = [{"id": "rank", "kind": "select", "node": 1, "role": "combobox",
+                "label": "Sort → Relevance", "value": "relevance", "current_value": "Newest"}]
+    assert p.choose(page(actions), [])["choice"] == "rank"
+    p.ranked_pages.add("https://example.test/")
+    assert p.choose(page(actions), [])["operation"] != "SELECT"
+
+
+def test_changing_sort_requires_applying_its_form(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.submitted = True
+    actions = [{"id": "rank", "kind": "select", "node": 1, "role": "combobox", "form": 7,
+                "label": "Sort → Relevance", "value": "relevance", "current_value": "Newest"},
+               {"id": "go", "kind": "click", "node": 2, "role": "button", "form": 7,
+                "label": "Go", "is_submit": True}]
+    history = []
+    d = p.choose(page(actions), history)
+    assert d["choice"] == "rank"
+    executed(history, d)
+    assert p.choose(page(actions[1:]), history)["choice"] == "go"
+
+
+def test_back_waits_for_navigation_before_another_mutation(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.item_step = {"kind": "item", "label": "paper:12", "url": "https://test/search", "href": "https://test/wrong"}
+    current = page([{"id": "back", "kind": "back", "label": "Back"}],
+                   url="https://test/wrong", title="Another paper", text="Different paper body. " * 10)
+    current["headings"] = ["Another paper"]
+    history = []
+    d = p.choose(current, history)
+    executed(history, d)
+    assert p.choose(current, history)["operation"] == "WAIT"
+    assert p.backtracks == 1
+
+
+def test_qualified_result_title_is_bound_to_its_observed_path(fake):
+    p = policy({"requirements": [], "open": "org/project", "finish": "Project body."})
+    actions = [{"id": "wrong", "kind": "click", "node": 1, "role": "link", "label": "project",
+                "result_title": "project", "href": "https://test/other/project"},
+               {"id": "right", "kind": "click", "node": 2, "role": "link", "label": "project",
+                "result_title": "project", "href": "https://test/org/project"}]
+    assert p.choose(page(actions), [])["choice"] == "right"
+
+
+def test_query_only_navigation_acknowledges_submit(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.awaiting_submit = True
+    p.submit_url = "https://test/search?order=newest"
+    p.before_submit_lines = {"Search"}
+    p.choose(page([], url="https://test/search?order=relevance"), [])
+    assert not p.awaiting_submit
+    assert p.submitted
+
+
+def test_phrase_refinement_requires_observed_title_search_and_is_bounded(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.submitted = True
+    actions = [{"id": "q", "kind": "fill", "node": 1, "role": "searchbox", "label": "Search terms",
+                "value": "Desired paper", "form": 8},
+               {"id": "scope", "kind": "select", "node": 2, "role": "combobox", "label": "Field → Title",
+                "value": "title", "current_value": "All fields", "form": 8}]
+    p.search_added = True
+    d = p.choose(page(actions), [])
+    assert d["operation"] == "TYPE_TEXT" and d["text"] == '"Desired paper"'
+    p.refined_query = True
+    assert p.choose(page(actions), [])["operation"] != "TYPE_TEXT"
+
+
+def test_unrelated_navigation_is_not_fallback_for_nonmatching_result_cards(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    actions = [{"id": "wrong", "kind": "click", "node": 1, "role": "link", "label": "paper:1",
+                "result_title": "Different paper", "href": "https://test/wrong"},
+               {"id": "privacy", "kind": "click", "node": 2, "role": "link", "label": "Privacy"}]
+    assert p.choose(page(actions), [])["operation"] == "BLOCKED"
+
+
+def test_visible_result_cards_allow_scanning_without_loading_delay(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.submitted = True
+    p.result_deadline = time.monotonic() + 100
+    actions = [{"id": "wrong", "kind": "click", "node": 1, "role": "link", "label": "paper:1",
+                "result_title": "Different paper", "href": "https://test/wrong"},
+               {"id": "down", "kind": "scroll", "label": "Scroll down", "delta": 560}]
+    assert p.choose(page(actions), [])["operation"] == "SCROLL"
+
+
+def test_primary_result_link_is_preferred_to_author_link(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    actions = [{"id": "author", "kind": "click", "node": 1, "role": "link", "label": "Example Author",
+                "result_title": "Desired paper", "href": "https://test/author"},
+               {"id": "paper", "kind": "click", "node": 2, "role": "link", "label": "paper:12",
+                "result_title": "Desired paper", "href": "https://test/paper", "result_primary": True}]
+    assert p.choose(page(actions), [])["choice"] == "paper"
+
+
+def paginated_page(url="https://test/search?page=1", target="https://test/search?page=2"):
+    return page([
+        {"id": "other", "kind": "click", "node": 1, "role": "link", "label": "Other article",
+         "result_title": "Other article", "href": "https://test/other"},
+        {"id": "next", "kind": "click", "node": 2, "role": "link", "label": "Next page",
+         "href": target, "pagination_next": True},
+    ], url=url)
+
+
+def test_paginate_only_after_visible_results_end(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    current = paginated_page()
+    current["actions"].append({"id": "down", "kind": "scroll", "label": "Scroll down", "delta": 560})
+    assert p.choose(current, [])["operation"] == "SCROLL"
+    current["actions"].pop()
+    assert p.choose(current, [])["choice"] == "next"
+
+
+def test_pagination_waits_for_results_and_does_not_replay_click(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    history, current = [], paginated_page()
+    executed(history, p.choose(current, history))
+    assert p.choose(current, history)["operation"] == "WAIT"
+    assert p.page_turns == 1
+    changed = paginated_page(url="https://test/search?page=2", target="https://test/search?page=3")
+    changed["actions"][0]["result_title"] = "Another article"
+    assert p.choose(changed, history)["choice"] == "next"
+    assert p.awaiting_page is None
+
+
+def test_pagination_cycle_and_budget_are_rejected(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    p.pagination_seen = {"https://test/search?page=1"}
+    assert p.choose(paginated_page(url="https://test/search?page=2", target="https://test/search?page=1"), [
+    ])["operation"] == "BLOCKED"
+    p.pagination_seen.clear()
+    p.page_turns = 2
+    assert p.choose(paginated_page(), [])["operation"] == "BLOCKED"
+
+
+def test_plain_next_button_is_not_pagination(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    current = paginated_page()
+    current["actions"][1]["pagination_next"] = False
+    current["actions"][1]["role"] = "button"
+    assert p.choose(current, [])["operation"] == "BLOCKED"
+
+
+def test_pagination_accepts_new_cards_without_url_change(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    history, current = [], paginated_page()
+    executed(history, p.choose(current, history))
+    current["actions"] = [{"id": "target", "kind": "click", "node": 3, "role": "link",
+                           "label": "Desired paper", "result_title": "Desired paper", "href": "https://test/desired"}]
+    assert p.choose(current, history)["choice"] == "target"
+    assert p.awaiting_page is None
+
+
+def test_pagination_detects_same_results_at_a_different_url(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    current, history = paginated_page(), []
+    executed(history, p.choose(current, history))
+    alias = paginated_page(url="https://test/search?page=1&alias=yes")
+    assert p.choose(alias, history)["operation"] == "BLOCKED"
+
+
+def test_pagination_waits_for_empty_loading_results(fake):
+    p = policy({"requirements": [], "open": "Desired paper", "finish": "Paper body."})
+    current, history = paginated_page(), []
+    executed(history, p.choose(current, history))
+    assert p.choose(page([], url="https://test/search?page=2", text="Loading"), history)["operation"] == "WAIT"
+
+
+def test_search_suggestion_navigation_does_not_refill_destination_search(fake):
+    plan = {"requirements": [{"what": "Search", "value": "Desired article"}],
+            "open": "Desired article", "finish": "Article body."}
+    p = policy(plan)
+    p.last = {"kind": "pick", "role": "link", "req": 0, "url": "https://test/", "label": "Desired article"}
+    p.typed = True
+    current = page([{"id": "search", "kind": "fill", "node": 5, "role": "searchbox", "label": "Search"}],
+                   url="https://test/article", title="Desired article", text="The article's detailed body. " * 6)
+    current["headings"] = ["Desired article"]
+    assert p.choose(current, [])["operation"] == "DONE"
+    assert p.frozen == {0} and not p.typed
+
+
+def test_nonmatching_suggestion_navigation_does_not_satisfy_goal(fake):
+    p = policy({"requirements": [{"what": "Search", "value": "Desired article"}],
+                "open": "Desired article", "finish": "Article body."})
+    p.last = {"kind": "pick", "role": "link", "req": 0, "url": "https://test/", "label": "Something else"}
+    assert p.choose(page([], url="https://test/other", title="Different article"), [])["operation"] != "DONE"
+    assert not p.frozen
+
+
+def test_identity_terms_filter_same_title_cards(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'identity_terms': ['Ada Example'], 'finish': 'Open.'})
+    cards = [{'id': 'wrong', 'kind': 'click', 'node': 1, 'role': 'link', 'label': 'Open article',
+              'result_title': 'Shared Title', 'result_context': 'Shared Title by Other Author',
+              'href': 'https://test/wrong'},
+             {'id': 'right', 'kind': 'click', 'node': 2, 'role': 'link', 'label': 'Open article',
+              'result_title': 'Shared Title', 'result_context': 'Shared Title by Ada Example',
+              'href': 'https://test/right'}]
+    assert p.choose(page(cards), [])['choice'] == 'right'
+    p = policy(p.plan)
+    assert p.choose(page(cards[:1]), [])['operation'] == 'BLOCKED'
+
+
+def test_same_title_detail_cannot_complete_without_identity_terms(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'identity_terms': ['Ada Example'], 'finish': 'Open.'})
+    current = page([], title='Shared Title', text='Other Author. ' + 'Long article body. ' * 10)
+    current['headings'] = ['Shared Title']
+    assert p.choose(current, [])['operation'] != 'DONE'
+    current['text'] += ' Ada Exampleton'
+    assert p.choose(current, [])['operation'] != 'DONE'
+    current['text'] += ' Ada Example'
+    assert p.choose(current, [])['operation'] == 'DONE'
+
+
+@pytest.mark.parametrize('terms', ['Ada', [None], [''], ['x' * 161], ['x'] * 9])
+def test_identity_terms_require_bounded_literal_phrases(terms):
+    with pytest.raises(ValueError):
+        model.parse_plan({'requirements': [], 'open': 'Shared Title', 'finish': 'Open.', 'identity_terms': terms}, {})
+
+
+def test_planner_preserves_identity_terms():
+    plan, _ = model.parse_plan({'requirements': [], 'open': 'Shared Title', 'finish': 'Open.',
+                                'identity_terms': ['Ada Example', 'Ada Example']}, {})
+    assert plan['identity_terms'] == ['Ada Example']
+
+
+def test_repair_does_not_drop_initial_identity_terms(fake, monkeypatch):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'identity_terms': ['Ada Example'], 'finish': 'Open.'})
+    p.initial_plan = dict(p.plan)
+    monkeypatch.setattr(laya, 'plan_goal', lambda *_a, **_k: (
+        {'requirements': [], 'open': 'Shared Title', 'finish': 'Open.'}, {}))
+    p.make_plan(page([]), [], reason='No matching card')
+    assert p.plan['identity_terms'] == ['Ada Example']
+
+
+def test_author_mention_is_not_authorship(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'authors': ['Ada Example'], 'finish': 'Open.'})
+    current = page([], title='Shared Title', text='Mentions Ada Example. ' + 'Article body. ' * 12)
+    current['headings'] = ['Shared Title']
+    current['authors'] = [{'value': 'Other Author', 'source': 'author label'}]
+    assert p.choose(current, [])['operation'] != 'DONE'
+    current['authors'] = [{'value': 'Ada Example', 'source': 'author label'}]
+    assert p.choose(current, [])['operation'] == 'DONE'
+
+
+def test_card_author_evidence_overrides_body_mentions(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'authors': ['Ada Example'], 'finish': 'Open.'})
+    card = {'id': 'wrong', 'kind': 'click', 'node': 1, 'role': 'link', 'label': 'Open article',
+            'result_title': 'Shared Title', 'result_context': 'Mentions Ada Example.',
+            'result_authors': [{'value': 'Other Author', 'source': 'author label'}], 'href': 'https://test/wrong'}
+    assert p.choose(page([card]), [])['operation'] == 'BLOCKED'
+    card['result_authors'] = [{'value': 'Ada Example', 'source': 'author label'}]
+    assert p.choose(page([card]), [])['choice'] == 'wrong'
+
+
+def test_repair_retains_authors(fake, monkeypatch):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'authors': ['Ada Example'], 'finish': 'Open.'})
+    p.initial_plan = dict(p.plan)
+    monkeypatch.setattr(laya, 'plan_goal', lambda *_a, **_k: (
+        {'requirements': [], 'open': 'Shared Title', 'finish': 'Open.'}, {}))
+    p.make_plan(page([]), [], reason='No matching author')
+    assert p.plan['authors'] == ['Ada Example']
+
+
+@pytest.mark.parametrize('authors', ['Ada', [None], [''], ['...'], ['x' * 161], ['x'] * 9])
+def test_author_plan_rejects_invalid_values(authors):
+    with pytest.raises(ValueError):
+        model.parse_plan({'requirements': [], 'open': 'Shared Title', 'finish': 'Open.', 'authors': authors}, {})
+
+
+def test_author_plan_preserves_names():
+    plan, _ = model.parse_plan({'requirements': [], 'open': 'Shared Title', 'finish': 'Open.',
+                               'authors': ['Ada Example']}, {})
+    assert plan['authors'] == ['Ada Example']
+
+
+def test_conflicting_author_returns_to_results_without_reopening(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'authors': ['Ada Example'], 'finish': 'Open.'})
+    p.item_step = {'kind': 'item', 'label': 'Shared Title', 'url': 'https://test/search', 'href': 'https://test/wrong'}
+    current = page([{'id': 'back', 'kind': 'back', 'label': 'Back'}],
+                   url='https://test/wrong', title='Shared Title', text='Mentions Ada Example. ' * 10)
+    current['headings'] = ['Shared Title']
+    current['authors'] = [{'value': 'Other Author', 'source': 'author label'}]
+    assert p.choose(current, [])['operation'] == 'BACK'
+    assert 'https://test/wrong' in p.rejected_urls
+    p.backtracks = 2
+    assert p.choose(current, [])['operation'] == 'BLOCKED'
+
+
+@pytest.mark.parametrize('requested,value,individual,expected', [
+    ('Lewis Carroll', 'Carroll, Lewis, 1832-1898', True, True),
+    ('Carroll, Lewis', 'Lewis Carroll', True, True),
+    ('Jacob Devlin', 'Jacob Devlin, Kenton Lee', False, True),
+    ('Desired Researcher', 'Other Desired, Researcher Else', False, False),
+    ('John Smith', 'J. Smith', True, False),
+    ('J. Smith', 'John Smith', True, False),
+    ('J. Smith', 'Smith, J.', True, True),
+    ('John Smith', 'John Smithson', True, False),
+    ('John Smith', 'John Smith Jr.', True, False),
+    ('李明', '王李明', True, False),
+    ('李明', '李明', True, True),
+    ('Juan Pablo de la Cruz', 'de la Cruz, Juan Pablo', True, True),
+    ('Desired Researcher', 'Researcher, Desired', False, False),
+    ('Ada Example', 'Authors: Ada Example and Other Person', False, True),
+])
+def test_author_names_preserve_boundaries(requested, value, individual, expected):
+    assert laya.author_matches(requested, {'value': value, 'individual': individual}) is expected

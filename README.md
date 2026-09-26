@@ -15,7 +15,7 @@ This repository continues the work in [ipenywis/laya-ultrafast](https://github.c
 jev-ultrafast asks [TypeSafe's Jev](https://docs.typesafe.ai/introduction), a hosted model, to choose each browser action. This port replaces that API call with **Laya**, an open-weight typed-decision model that runs on your Mac:
 
 - **No decision API charge.** Laya inference runs on your Mac. One browser step can use several model calls plus rules; step time is not a single forward-pass benchmark.
-- **One planning stage per task.** An OpenAI-compatible model (OpenRouter by default, or a local server) turns the goal into field values, the item to open, and a finish condition. Invalid plans may trigger up to three calls. With a local planner and downloaded weights, inference needs no cloud API.
+- **Bounded planning and repair.** An OpenAI-compatible model (OpenRouter by default, or a local server) turns the goal into field values, the item to open, and a finish condition. Each planning stage allows up to three validation attempts. At most two additional stages can repair a stalled plan or inspect fields after observed navigation (at most nine planning responses per task). With a local planner and downloaded weights, inference needs no cloud API.
 - **A different policy.** Laya answers narrow questions well: which field is the destination, whether `Tue, Oct 20` matches `October 20, 2026`, which suggestion is London. It does not reliably answer the open question "what should the browser do next?". So [`laya_ultrafast/laya.py`](laya_ultrafast/laya.py) combines narrow Laya questions with rules that apply on any site:
   1. Fill the values the goal states. Laya maps each one to a field, and Laya or plain code checks it.
   2. After typing or opening a control, choose from the options that appeared.
@@ -24,7 +24,23 @@ jev-ultrafast asks [TypeSafe's Jev](https://docs.typesafe.ai/introduction), a ho
   Every target is still an element the agent observed on the page, and there are no site-specific plans.
 - **Hosted mode still works.** Set `DECISION_MODEL=typesafe` to use the original Jev policy unchanged.
 
+See [姓名边界与倒序验收](docs/name-order-20260926.md) for the latest evaluation; [作者归属验收](docs/authorship-20260926.md) records the preceding iteration; [翻页与同名条目验收](docs/boundaries-20260926.md) records the preceding iteration; [重复测试与分页验证](docs/stability-20260926.md) records the previous iteration; [搜索结果关联验收](docs/result-cards-20260926.md) records the preceding iteration; [此前修复记录](docs/browser-repair-20260926.md) preserves earlier failures.
+
 ## Improvements in this repository
+
+- **Explicit item identity:** optional `authors` constraints require author-labelled evidence on the candidate card and detail page; incidental body mentions do not count. Conflicting detail pages can be rejected and backtracked. Person boundaries are preserved, and explicit single-person fields support surname-first formatting; initials are not guessed. Other `identity_terms` remain literal phrase checks. Sparse metadata, aliases and inaccurate site labels remain limitations.
+
+- **Bounded pagination:** after scanning visible results, follow only an observed same-host next-page link with pagination semantics, at most twice. Wait for new results and stop on repeated result sets. Search suggestions that already opened the target article no longer trigger another search.
+- **Repeatable evaluation:** `examples/evaluate_stability.py` preserves every attempt, checks real final pages and supports repeated Chinese/English tasks. Its `--rescore` mode rechecks saved evidence without API calls. `examples/evaluate_pagination.py` tests third-page targets, delayed updates and cycles against an isolated local server with real Laya and no planner API.
+
+
+- **Result context and recovery:** bind result titles and nearby author text to observed links; prefer the card's primary link over author/download links. Exact-title searches can refine a query once when title search is offered. Scan at most 24 observed scroll positions and backtrack at most twice from mismatched detail pages, excluding rejected URLs.
+
+
+- **Observed planning and bounded repair:** planners receive control roles, current values and options; navigation targets must be observed. Up to two repairs receive failure history.
+- **Search and completion safeguards:** duplicate search injection is suppressed, dropdown questions can decline unsupported values, and item completion checks identity, body evidence and search-result context. Native search forms can use an observed Enter action when no submit button is available.
+- **Evaluation boundaries:** these are conservative heuristics, not a universal verifier. Independent task checks remain required; uncertain results can still stop as blocked.
+
 
 - **Chinese and Unicode matching:** CJK text is retained instead of being discarded by ASCII folding. Overlapping CJK terms let labels such as `出发地` match requirements such as `出发城市`, while accented Latin text such as `Zürich` still normalizes predictably.
 - **Chinese dates and controls:** the deterministic layer recognizes `2026年10月20日`, Chinese search and submit labels, and Chinese negative toggle wording.
@@ -60,7 +76,7 @@ uv run laya
 
 Open **http://127.0.0.1:8766**, choose a scenario, and click **Start demo → Run automatically**.
 
-For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. The fixture generates fictional results without login or purchases. A remote text planner would receive the task, field labels and visible item labels; use the local setup below to keep inference on your Mac.
+For the local Chinese fixture, choose **中文车票搜索 · 本地测试页**. The fixture generates fictional results without login or purchases. A remote text planner would receive the task, current page text, control types/values/options, visible item labels and recent failure history; use the local setup below to keep inference on your Mac.
 
 ### Fully local visible demo / 完全本地演示
 
@@ -86,7 +102,7 @@ Chrome connects through [Browser Harness](https://github.com/browser-use/browser
 | `DECISION_MODEL` | `laya` | `laya` for local decisions, `typesafe` for the original hosted Jev policy |
 | `LAYA_MODEL` | `aac6fef/laya-typed-decisions-mlx` | Laya checkpoint, from the Hub or a local path |
 | `TEXT_MODEL_BASE_URL` | `https://openrouter.ai/api/v1` | Any OpenAI-compatible endpoint. `localhost` endpoints need no key |
-| `TEXT_MODEL` | `inception/mercury-2.5` | Model that plans the task once per run |
+| `TEXT_MODEL` | `inception/mercury-2.5` | Model for initial planning and bounded repair |
 | `TEXT_MODEL_API_KEY` | — | Required for remote endpoints |
 | `TEXT_MODEL_REASONING` | `none` | Turns reasoning off for faster planning |
 | `TYPESAFE_API_KEY`, `TYPESAFE_MODEL` | — | Only for `DECISION_MODEL=typesafe` |

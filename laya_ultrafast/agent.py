@@ -83,13 +83,10 @@ class Agent:
                 raise ValueError("Reached the demo's model-call budget")
             policy = getattr(self, "policy", None)
             if policy:
-                planned = policy.plan is not None
                 state["decision"] = policy.choose(state["page"], state["history"])
-                if not planned:
-                    state["goal_plan"] = deepcopy(policy.initial_plan)
-                    state["text_calls"].append(
-                        {**policy.plan_meta, "field": "goal plan", "value": deepcopy(policy.initial_plan)}
-                    )
+                state["goal_plan"] = deepcopy(policy.initial_plan)
+                state["text_calls"].extend(policy.planning_events)
+                policy.planning_events.clear()
             else:
                 state["decision"] = choose(state["page"], state["goal"], state["history"])
             state["decisions"].append(
@@ -171,9 +168,16 @@ class Agent:
                     base64.b64decode(state["page"]["screenshot"])
                 )
             repeated = state["history"][-3:]
+            stalled = len(repeated) == 3 and all(
+                h["page_changed"] is False and h["kind"] != "wait" for h in repeated
+            )
+            policy = getattr(self, "policy", None)
+            if stalled and policy and policy.repairs < 2:
+                policy.repair_reason = "Three executed actions produced no observed page change."
+                stalled = False
             state["status"] = (
                 "blocked"
-                if len(repeated) == 3 and all(h["page_changed"] is False and h["kind"] != "wait" for h in repeated)
+                if stalled
                 else "ready"
             )
         else:

@@ -164,7 +164,13 @@ def browser_operation(request):
     if operation == "act":
         action = request["action"]
         kind = action["kind"]
-        if kind == "scroll":
+        if kind == "back":
+            history = call("Page.getNavigationHistory")
+            index = history["currentIndex"]
+            if index <= 0:
+                raise StalePage("No previous observed history entry")
+            call("Page.navigateToHistoryEntry", entryId=history["entries"][index - 1]["id"])
+        elif kind == "scroll":
             call("Input.dispatchMouseEvent", type="mouseWheel", x=550, y=650, deltaX=0, deltaY=action["delta"])
         elif kind != "wait":
             if type(action["node"]) is not int:
@@ -195,6 +201,11 @@ def browser_operation(request):
                 x, y = target["x"], target["y"]
                 for event in ("mousePressed", "mouseReleased"):
                     call("Input.dispatchMouseEvent", type=event, x=x, y=y, button="left", clickCount=1)
+                if kind == "enter":
+                    call("Input.dispatchKeyEvent", type="keyDown", key="Enter", code="Enter",
+                         windowsVirtualKeyCode=13, text="\r")
+                    call("Input.dispatchKeyEvent", type="keyUp", key="Enter", code="Enter",
+                         windowsVirtualKeyCode=13)
                 if kind == "fill":
                     call(
                         "Input.dispatchKeyEvent",

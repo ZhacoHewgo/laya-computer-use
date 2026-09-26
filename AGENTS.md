@@ -6,7 +6,7 @@ Google Flights only offers future dates: run `examples/flights.py --date YYYY-MM
 - The input is one natural-language goal. Do not add site-specific plans or hardcoded field values.
 - Local Laya decisions (laya_ultrafast/laya.py) are the default. Laya answers narrow typed questions; generic rules
   compose them. Rules must hold on any site. Measure any rule change on Flights, Wikipedia, and both fixtures.
-- The text model plans once per task (requirements, the item to open, the finish condition). In Laya mode TYPE_TEXT
+- The text model plans initially and may repair at most twice using current observations and failure history (requirements, the item to open, the finish condition). In Laya mode TYPE_TEXT
   types a planned value; it does not call the text model per field.
 - With DECISION_MODEL=typesafe, TypeSafe chooses an operation and operation-specific target heads in one request.
   Consume only the selected operation's target.

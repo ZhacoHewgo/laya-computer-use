@@ -49,7 +49,7 @@ UNFINISHED = {
 
 MAX_RESULT_WAITS = 12  # bounded observation attempts for submission acknowledgement
 ITEM_RESULT_GRACE_SECONDS = 5.0
-MAX_RESULT_SCROLLS = 8
+MAX_RESULT_SCROLLS = 24
 
 _MODEL = None
 
@@ -81,6 +81,28 @@ def fold(text):
         else:
             result.append(char if char.isalnum() else " ")
     return re.sub(r"\s+", " ", "".join(result)).strip()
+
+
+def author_matches(requested, entry):
+    """Preserve person boundaries; reorder only metadata explicitly describing one person.
+
+    Initials are not expanded: J. Smith is insufficient evidence for John Smith.
+    """
+    def canonical(value, individual):
+        value = re.sub(r"^(?:authors?|作者|著者)\s*[:：]\s*|^by\s+", "", value.strip(), flags=re.I)
+        if individual:
+            value = re.sub(r",\s*\d{4}\s*[-–]\s*\d{0,4}\s*$", "", value)
+            parts = [part.strip() for part in value.split(",")]
+            if len(parts) == 2 and all(parts):
+                value = parts[1] + " " + parts[0]
+        return fold(value)
+
+    wanted = canonical(requested, True)
+    text = re.sub(r"^(?:authors?|作者|著者)\s*[:：]\s*", "", entry.get("value", ""), flags=re.I)
+    if entry.get("individual") is True:
+        return bool(wanted) and wanted == canonical(text, True)
+    people = re.split(r"[,;\n]|\s+(?:and|&)\s+", text, flags=re.I)
+    return bool(wanted) and any(wanted == canonical(person, False) for person in people)
 
 
 def words(text):
@@ -128,7 +150,7 @@ def observed(page):
     """One entry per DOM node, indexed in the same order as model.action_space (the inspector's indices)."""
     elements, nodes = [], {}
     for action in page["actions"]:
-        if action["kind"] not in {"click", "fill", "select"}:
+        if action["kind"] not in {"click", "fill", "select", "enter"}:
             continue
         e = nodes.get(action["node"])
         if e is None:
@@ -141,6 +163,12 @@ def observed(page):
                 "checked": action.get("checked"),
                 "expanded": action.get("expanded"),
                 "hint": action.get("hint", ""),
+                "href": action.get("href", ""),
+                "pagination_next": action.get("pagination_next", False),
+                "result_title": action.get("result_title", ""),
+                "result_primary": action.get("result_primary", False),
+                "result_context": action.get("result_context", ""),
+                "result_authors": action.get("result_authors", []),
                 "form": action.get("form"),
                 "dialog": action.get("dialog"),
                 "is_submit": action.get("is_submit", False),
@@ -180,6 +208,8 @@ def plannable(e):
 
 def describe(e):
     text = f"{e['role']} {e['label'][:70]}"
+    if e.get("result_title"):
+        text += f" | Title: {e['result_title']} | {e.get('result_context', '')[:180]}"
     if e.get("hint"):
         text += f" ({e['hint'][:50]})"
     if is_field(e) and e["current"] != e["label"]:
@@ -244,9 +274,10 @@ def titled(title, name):
         return False
     if folded_name and folded_name in folded_title:
         return True
-    wanted, shown = words(name), words(title)
-    shared = len(wanted & shown)
-    return bool(wanted) and shared >= max(1, round(0.6 * len(wanted))) and shared >= 0.6 * len(shown)
+    # Full identity tokens, without the five-character stems used for candidate ranking.
+    wanted = set(re.findall(r"[^\W_]+", folded_name)) - {"the", "and", "of"}
+    shown = set(re.findall(r"[^\W_]+", folded_title))
+    return bool(wanted) and wanted <= shown
 
 
 def relevance(e, text):
@@ -299,6 +330,18 @@ class LayaPolicy:
         self.satisfied_values = {}
         self.input_step = None
         self.rejected_fields = {}
+        self.planning_events = []
+        self.repairs = 0
+        self.repair_reason = None
+        self.rejected_urls = set()
+        self.backtracks = 0
+        self.returning_from = None
+        self.ranked_pages = set()
+        self.refined_query = False
+        self.page_turns = 0
+        self.pagination_seen = set()
+        self.visited_result_sets = set()
+        self.awaiting_page = None
 
     # Bookkeeping ---------------------------------------------------------------------------------------------
 
@@ -324,6 +367,22 @@ class LayaPolicy:
                 self.awaiting_submit = True
                 self.result_deadline = time.monotonic() + ITEM_RESULT_GRACE_SECONDS
                 self.result_scrolls.clear()
+            if step["kind"] == "page_next":
+                self.page_turns += 1
+                self.visited_result_sets.add(tuple(step["result_signature"]))
+                self.pagination_seen.update((step["url"], step["href"]))
+                self.awaiting_page = step
+            if step["kind"] == "back":
+                self.backtracks += 1
+                self.returning_from = step["url"]
+            if step["kind"] == "rank_results":
+                self.typed = True
+                self.submitted = False
+                if step.get("form") is not None:
+                    self.dirty_forms.add(step["form"])
+                self.ranked_pages.add(step["url"])
+                self.result_deadline = time.monotonic() + ITEM_RESULT_GRACE_SECONDS
+                self.result_scrolls.clear()
             if step["kind"] == "scroll":
                 self.result_scrolls.add((step["url"], step["scroll_y"]))
             if step["kind"] == "confirm":
@@ -331,7 +390,9 @@ class LayaPolicy:
             if step["req"] is not None:
                 self.attempts[step["req"]] = self.attempts.get(step["req"], 0) + 1
                 self.edit_url, self.submitted = step["url"], False
-            if step["kind"] in {"fill", "select", "toggle", "pick"}:
+            if step["kind"] == "refine_query":
+                self.refined_query = True
+            if step["kind"] in {"fill", "select", "toggle", "pick", "refine_query"}:
                 self.typed = True
                 self.submitted = False
                 if step.get("form") is not None:
@@ -376,22 +437,59 @@ class LayaPolicy:
 
     # Decisions ----------------------------------------------------------------------------------------------
 
+    def make_plan(self, page, elements, reason=None, history=()):
+        labels = list(dict.fromkeys(display(e) for e in elements if is_field(e)))
+        items = list(dict.fromkeys(
+            e["label"] for e in elements if "click" in e["actions"] and not is_field(e)
+            and not e["is_submit"] and (e["role"] == "link" or not is_submit_label(e["label"]))
+        ))
+        controls = [{"label": display(e), "role": e["role"], "value": e["current"],
+                     "operations": list(e["actions"]), "options": [option_label(o) for o in e["options"]]}
+                    for e in elements if is_field(e)]
+        plan, meta = plan_goal(self.goal, labels, items=items, controls=controls,
+                              page={"url": page["url"], "title": page["title"], "text": page["text"][:4000],
+                                    "results": [{"title": e["result_title"], "href": e["href"],
+                                                 "context": e["result_context"]}
+                                                for e in elements if e.get("result_title")][:10]},
+                              feedback={"reason": reason, "history": list(history)[-8:]} if reason else None)
+        if reason:
+            # A repair must not silently drop identity conditions from the accepted initial plan.
+            for key in ("identity_terms", "authors"):
+                retained = (self.initial_plan or {}).get(key, [])
+                if retained:
+                    plan[key] = list(dict.fromkeys(retained + plan.get(key, [])))
+            self.repairs += 1
+            # Re-map from the current page. Never replay a previous mutation or erase action history.
+            self.fields.clear()
+            self.met.clear()
+            self.frozen.clear()
+            self.attempts.clear()
+            self.satisfied_values.clear()
+            self.rejected_fields.clear()
+            self.input_step = None
+            self.search_added = False
+            self.waits = 0
+        else:
+            self.initial_plan = deepcopy(plan)
+        self.plan, self.plan_meta = plan, meta
+        self.planning_events.append({**meta, "field": "goal repair" if reason else "goal plan",
+                                     "value": deepcopy(plan), "reason": reason})
+
     def choose(self, page, history):
         started = time.perf_counter()
         self.sync(history)
         elements = observed(page)
         if self.plan is None:
-            # Action buttons are not fields. Offering them to a small planner caused invented requirements.
-            labels = list(dict.fromkeys(display(e) for e in elements if is_field(e)))
-            items = list(dict.fromkeys(
-                e["label"] for e in elements if "click" in e["actions"] and not is_field(e)
-                and not e["is_submit"] and not is_submit_label(e["label"])
-            ))
-            self.plan, self.plan_meta = plan_goal(self.goal, labels, items=items)
-            self.initial_plan = deepcopy(self.plan)
+            self.make_plan(page, elements)
+        elif self.repair_reason and self.repairs < 2 and self.initial_plan is not None:
+            self.make_plan(page, elements, self.repair_reason, history)
+        self.repair_reason = None
         self.answers, self.questions, self.tokens = {}, {}, 0
         self.model_calls = 0
         op, element, action, picked, kind, req, text = self.decide(page, elements)
+        if op == "BLOCKED" and self.repairs < 2 and self.initial_plan is not None:
+            self.repair_reason = f"No executable progress. Requirement index: {req}; current plan: {self.plan}"
+            op, kind = "WAIT", "wait"
         answer = picked[1] if picked else None
         indices = {str(e["node"]): e["index"] for e in elements}
         choice = action["id"] if action else {"DONE": "DONE", "BLOCKED": "BLOCKED"}.get(op, "wait")
@@ -401,6 +499,8 @@ class LayaPolicy:
             target = f"{element['index']}:{element['options'].index(action) + 1}"
         self.pending = {
             "choice": choice, "kind": kind, "req": req, "node": element["node"] if element else None,
+            "result_signature": self.result_signature(elements),
+            "href": element.get("href") if element else None,
             "url": page["url"], "before": {e["node"] for e in elements},
             "label": element["label"] if element else None,
             "visible_lines": {line.strip() for line in page["text"].splitlines()},
@@ -429,12 +529,44 @@ class LayaPolicy:
             "request": {"plan": deepcopy(self.plan), "questions": self.questions},
         }
 
+    @staticmethod
+    def result_signature(elements):
+        return sorted({(e.get("result_title", ""), e.get("href", ""))
+                       for e in elements if e.get("result_title")})
+
     def decide(self, page, elements):
         """Return (operation, element, action, (element, answer) or None, step kind, requirement, text)."""
         reqs = self.plan["requirements"]
         by_node = {e["node"]: e for e in elements}
         clickable = [e for e in elements if "click" in e["actions"] and self.failed.get(e["node"], 0) < 2]
         last = self.last
+        if self.awaiting_page:
+            previous = self.awaiting_page
+            signature = self.result_signature(elements)
+            if not signature or (page["url"] == previous["url"] and signature == previous["result_signature"]):
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
+            if tuple(signature) in self.visited_result_sets:
+                return "BLOCKED", None, None, None, "blocked", None, None
+            self.awaiting_page = None
+            self.result_scrolls.clear()
+            self.result_deadline = time.monotonic() + ITEM_RESULT_GRACE_SECONDS
+        if self.returning_from:
+            if page["url"] == self.returning_from:
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
+            self.returning_from = None
+
+        # Search suggestions can be navigation links, not merely values for a form field.
+        # Once such a click lands on the requested item, keep its search requirement satisfied.
+        if (last and last["kind"] == "pick" and last.get("role") == "link"
+                and last.get("req") is not None and page["url"] != last["url"]
+                and self.plan.get("open") and titled(page["title"], self.plan["open"])):
+            self.met.add(last["req"])
+            self.frozen.add(last["req"])
+            self.typed = False
+            self.dirty_forms.clear()
+            self.input_step = None
 
         # Confirming a picker is a substep, not submission of the whole search form.
         # Never replay its confirmation while waiting for the dialog to close.
@@ -456,7 +588,7 @@ class LayaPolicy:
             # A click is not acknowledgement. Wait for read-only evidence before any further mutation.
             wanted = set().union(*(words(r["value"]) for r in reqs)) if reqs else set()
             new_lines = {line.strip() for line in page["text"].splitlines()} - self.before_submit_lines
-            applied = location(page["url"]) != location(self.submit_url) or any(
+            applied = page["url"] != self.submit_url or any(
                 words(line) & wanted for line in new_lines
             )
             if not applied:
@@ -466,6 +598,11 @@ class LayaPolicy:
             self.dirty_forms.clear()
             if location(page["url"]) != location(self.submit_url):
                 self.frozen |= self.met
+
+        # In-place search can acknowledge submission before a later item navigation changes the URL.
+        # Its completed search requirements belong to the old page, not the item's unrelated fields.
+        if self.submitted and self.submit_url and location(page["url"]) != location(self.submit_url):
+            self.frozen |= self.met
 
         # 1. A typed query or an opened control offers new choices: take the one its requirement asks for.
         editing = self.input_step or (last if last and last["kind"] in {"fill", "open"} else None)
@@ -486,12 +623,37 @@ class LayaPolicy:
                 op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
                 return op, None, None, None, op.lower(), None, None
 
+        navigation = self.plan.get("navigate")
+        if navigation:
+            if self.last and self.last["kind"] == "navigate":
+                return "BLOCKED", None, None, None, "blocked", None, None
+            targets = [e for e in clickable if e["label"] == navigation and not is_field(e)
+                       and not e["is_submit"] and (e["role"] == "link" or not is_submit_label(e["label"]))]
+            if len(targets) == 1:
+                e = targets[0]
+                return "CLICK", e, e["actions"]["click"], None, "navigate", None, None
+            return "BLOCKED", None, None, None, "blocked", None, None
+
         # An item to open that nothing on the page names has to be searched for first.
         item = self.plan.get("open")
+        identity_terms = self.plan.get("identity_terms", [])
+
+        authors = self.plan.get("authors", [])
+
+        def matches_authors(evidence):
+            return all(any(author_matches(author, entry) for entry in evidence) for author in authors)
+
+        def matches_identity(text):
+            normalized = " " + fold(text) + " "
+            return all(" " + fold(term) + " " in normalized for term in identity_terms)
         if item and not self.search_added and not titled(page["title"], item):
             search = [e for e in elements if "fill" in e["actions"] and
                       (e["role"] == "searchbox" or is_search_label(e["label"]))]
-            if search and not any(relevance(e, item) for e in clickable):
+            planned_search = any(
+                is_search_label(r["what"]) or any(fold(r["what"]) in {fold(e["label"]), fold(display(e))}
+                                                  for e in search) for r in reqs
+            )
+            if search and not planned_search and not any(relevance(e, item) for e in clickable):
                 reqs.append({"what": "search", "value": item})
                 self.search_added = True
 
@@ -539,8 +701,11 @@ class LayaPolicy:
                 answer = self.ask(state, {f"select_{i}": {
                     "type": "choice",
                     "instructions": f"Which option sets {r['what']} to {r['value']}?",
-                    "criteria": {str(n): option_label(o) for n, o in enumerate(e["options"])},
+                    "criteria": {**{str(n): option_label(o) for n, o in enumerate(e["options"])},
+                                 "none": "None of these options can set the requested value"},
                 }})[f"select_{i}"]
+                if answer["choice"] == "none":
+                    return "BLOCKED", None, None, None, "blocked", i, None
                 option = e["options"][int(answer["choice"])]
                 return "SELECT", e, option, (e, answer), "select", i, None
             return "CLICK", e, e["actions"]["click"], None, "toggle" if e["role"] in TOGGLES else "open", i, None
@@ -557,6 +722,10 @@ class LayaPolicy:
                                "Which button applies the filled search/filter form?", "")
             if picked:
                 return self.click(picked, "submit", None)
+            implicit = [e for e in elements if "enter" in e["actions"] and e["form"] in self.dirty_forms]
+            if len(implicit) == 1:
+                e = implicit[0]
+                return "PRESS_ENTER", e, e["actions"]["enter"], None, "submit", None, None
             return "BLOCKED", None, None, None, "blocked", None, None
 
         # 3. Everything stated is applied. Check the finish condition.
@@ -571,8 +740,40 @@ class LayaPolicy:
             chosen = (opened
                       and len(words(opened["label"]) & words(page["title"])) >= 0.6 * len(words(page["title"]))
                       and titled(page["title"], re.sub(r"^(?:view|read|open)\s+", "", opened["label"], flags=re.I)))
-            if chosen or titled(page["title"], item):
+            headings = page.get("headings", [])
+            identity = titled(page["title"], item) or bool(chosen)
+            body = page.get("main_text", page["text"])
+            heading_name = opened["label"] if chosen else item.rsplit("/", 1)[-1]
+            def same_heading(h):
+                title = fold(re.sub(r"^(?:title|标题)\s*[:：]\s*", "", h, flags=re.I))
+                name = fold(re.sub(r"^(?:view|read|open)\s+", "", heading_name, flags=re.I))
+                return title == name or title.startswith(name + " by ")
+
+            heading_matches = any(same_heading(h) for h in headings) if headings else identity
+            path = urlparse(page["url"]).path.rstrip("/").casefold()
+            qualified = "/" in item and " " not in item
+            qualified_match = qualified and path.endswith("/" + item.casefold())
+            if qualified:
+                identity = identity and qualified_match
+                heading_matches = qualified_match
+            search_route = "search" in path.split("/")
+            result_listing = bool(re.search(r"displaying results \d|showing \d+.*results", page["text"], re.I))
+            if (identity and heading_matches and matches_identity(body) and matches_authors(page.get("authors", []))
+                    and len(body.strip()) >= 80
+                    and not (search_route or result_listing)):
                 return "DONE", None, None, None, "done", None, None
+            wrong_author = bool(authors and page.get("authors") and not matches_authors(page["authors"]))
+            if opened and headings and (not heading_matches or wrong_author) and page["url"] != opened["url"]:
+                back = next((a for a in page["actions"] if a["kind"] == "back"), None)
+                if back and self.backtracks < 2:
+                    self.rejected_urls.add(opened.get("href") or page["url"])
+                    self.rejected_urls.add(page["url"])
+                    return "BACK", None, back, None, "back", None, None
+            if wrong_author and identity and not (search_route or result_listing):
+                return "BLOCKED", None, None, None, "blocked", None, None
+            if identity and not (search_route or result_listing):
+                op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"
+                return op, None, None, None, op.lower(), None, None
         elif self.submitted or navigated or not reqs:
             # Laya's yes/no finish check was unreliable; contrasting page kinds separated real outcomes.
             state = f"Page title: {page['title']}\nPage: {summary(page['text'], finish)}"
@@ -614,31 +815,80 @@ class LayaPolicy:
         mapped = {self.fields.get(i) for i in range(len(reqs))}
         fresh = {e["node"] for e in clickable if last and e["node"] not in last["before"]}
         # A next-step target clicked twice already has shown it does not advance the goal.
-        candidates = [e for e in clickable if e["node"] not in mapped and self.tried.get(e["label"], 0) < 2]
+        candidates = [e for e in clickable if e["node"] not in mapped and self.tried.get(e["label"], 0) < 2
+                      and e.get("href", "") not in self.rejected_urls and not e.get("pagination_next")]
 
         state = f"Goal: {self.goal}\nFinish condition: {finish}\nPage title: {page['title']}\nPage: {page['text']}"
         if item:
-            named = [e for e in candidates if relevance(e, item) and not is_field(e)]
+            # Exact card titles bind descriptive text to otherwise opaque ID links.
+            exact_cards = [e for e in candidates if fold(e.get("result_title", "")) == fold(item) or (
+                "/" in item and fold(e.get("result_title", "")) == fold(item.rsplit("/", 1)[-1])
+                and urlparse(e.get("href", "")).path.rstrip("/").casefold().endswith("/" + item.casefold())
+            )]
+            exact_cards = [e for e in exact_cards if matches_identity(e.get("result_context", ""))
+                           and matches_authors(e.get("result_authors", []))]
+            detail_cards = [e for e in exact_cards if not re.search(
+                r"(?:\.pdf(?:$|[?#])|/pdf/)", e.get("href", ""), re.I)
+                and fold(e["label"]) not in {"pdf", "html", "download"}]
+            exact_cards = detail_cards or exact_cards
+            primary = [e for e in exact_cards if e.get("result_primary")]
+            exact_cards = primary or exact_cards
+            named = exact_cards or [e for e in candidates if relevance(e, item) and not is_field(e)
+                                    and not e.get("result_title")]
+            named = [e for e in named if matches_identity(e.get("result_context", "") or e["label"])
+                     and matches_authors(e.get("result_authors", []))]
+            if not exact_cards and self.submitted and not self.refined_query:
+                # Use phrase search only where the observed form explicitly offers title search.
+                # No site-specific URL or selector is constructed.
+                title_search = any(fold(option_label(o)) in {"title", "标题"}
+                                   for e in elements for o in e["options"])
+                queries = [e for e in elements if "fill" in e["actions"]
+                           and is_search_label(e["label"]) and fold(e["current"]) == fold(item)]
+                if title_search and len(queries) == 1 and not any(c in item for c in '\"\n'):
+                    e = queries[0]
+                    return "TYPE_TEXT", e, e["actions"]["fill"], None, "refine_query", None, f'"{item}"'
+            if not exact_cards and self.submitted and page["url"] not in self.ranked_pages:
+                ranks = [(e, o) for e in elements for o in e["options"]
+                         if fold(option_label(o)) in {"relevance", "相关性", "相关度"}]
+                if len(ranks) == 1:
+                    e, option = ranks[0]
+                    return "SELECT", e, option, None, "rank_results", None, None
             # Navigation acknowledges a submit, not completion of asynchronous results. An exact
             # title can be acted on immediately; otherwise give results time to arrive, then inspect
             # lower viewports using only the scroll action offered by this observation.
             phrase = fold(item)
-            strong = [e for e in named if phrase and phrase in fold(e["label"])]
-            if self.submitted and not strong:
-                if time.monotonic() < self.result_deadline:
+            strong = exact_cards or [e for e in named if phrase and phrase in fold(e["label"])]
+            if (self.submitted or any(e.get("result_title") for e in elements)) and not strong:
+                if not any(e.get("result_title") for e in elements) and time.monotonic() < self.result_deadline:
                     return "WAIT", None, None, None, "wait", None, None
                 scroll = next((a for a in page["actions"] if a["kind"] == "scroll" and a.get("delta", 0) > 0), None)
                 position = (page["url"], page.get("scroll", {}).get("y", 0))
                 if scroll and position not in self.result_scrolls and len(self.result_scrolls) < MAX_RESULT_SCROLLS:
                     return "SCROLL", None, scroll, None, "scroll", None, None
+            if not strong and any(e.get("result_title") for e in elements):
+                more_below = any(a["kind"] == "scroll" and a.get("delta", 0) > 0 for a in page["actions"])
+                if not more_below and self.page_turns < 2:
+                    next_links = {e["href"]: e for e in clickable if e.get("pagination_next") and e.get("href")
+                                  and e["href"] != page["url"] and e["href"] not in self.pagination_seen
+                                  and urlparse(e["href"]).netloc == urlparse(page["url"]).netloc}
+                    if len(next_links) == 1:
+                        e = next(iter(next_links.values()))
+                        return "CLICK", e, e["actions"]["click"], None, "page_next", None, None
             named = strong or named
             # Near-duplicates ("completeness" vs "incompleteness") fooled Laya, so only the elements naming
             # the most of the item's words stay; Laya breaks exact ties.
             picked = self.pick("item", named, state, f"Which element opens {item}?", item, top_tier=True, margin=0)
+            if not named and any(e.get("result_title") for e in candidates):
+                # Structured results are available, but none matches: repair the search rather than
+                # offering unrelated site navigation as an article candidate.
+                return "BLOCKED", None, None, None, "blocked", None, None
+            if not named and (identity_terms or authors):
+                return "BLOCKED", None, None, None, "blocked", None, None
             if not named:
                 # Lexical matching cannot bridge languages. Ask the multilingual choice model using
                 # the original request; it may decline when no observed item matches.
-                items = [e for e in candidates if not is_field(e) and not is_submit_label(e["label"])]
+                items = [e for e in candidates if not is_field(e) and not is_submit_label(e["label"])
+                         and not e.get("result_title")]
                 picked = self.pick("item", items, f"User request: {self.goal}",
                                    "Which visible item matches the item the user wants to open?", self.goal,
                                    allow_none=True)

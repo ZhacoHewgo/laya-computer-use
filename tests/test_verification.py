@@ -32,3 +32,36 @@ def test_flight_origin_accessible_name_may_include_airport_but_value_must_match(
     assert not verify_flights(page)["passed"]  # An origin by itself is not a completed search.
     page["actions"][0]["value"] = "Hong Kong"
     assert not verify_flights(page)["checks"]["origin"]
+
+
+def test_attention_paper_requires_identity_and_abstract_not_a_caption():
+    from examples.verification import attention_paper_checks
+
+    observed = {"url": "https://arxiv.org/abs/1706.03762v7", "headings": ["Attention Is All You Need"],
+                "text": "Ashish Vaswani, Noam Shazeer. The dominant sequence transduction models ... "
+                        "the Transformer, based solely on attention mechanisms ... English constituency parsing"}
+    assert attention_paper_checks(observed)["passed"]
+    assert not attention_paper_checks({**observed, "url": "https://arxiv.org/abs/2512.11254"})["passed"]
+    caption_only = {**observed, "text": "Ashish Vaswani, Noam Shazeer. Abstract: Transformer"}
+    assert not attention_paper_checks(caption_only)["passed"]
+
+
+def test_stability_bert_checks_cannot_pass_on_a_search_listing():
+    from examples.evaluate_stability import BERT, verify_search_case
+
+    observed = {"url": "https://arxiv.org/abs/1810.04805v2", "headings": [BERT],
+                "text": "Jacob Devlin and Kenton Lee. A bidirectional language representation model can be fine-tuned."}
+    assert verify_search_case("bert_en", observed)["passed"]
+    assert verify_search_case("bert_zh", observed)["passed"]
+    assert not verify_search_case("bert_en", {**observed, "url": "https://arxiv.org/search/"})["passed"]
+    assert not verify_search_case("bert_en", {**observed, "headings": ["BERT overview"]})["passed"]
+
+
+def test_stability_ada_checks_require_article_body_and_correct_host():
+    from examples.evaluate_stability import verify_search_case
+
+    observed = {"url": "https://en.wikipedia.org/wiki/Ada_Lovelace", "headings": ["Ada Lovelace"],
+                "text": "Charles Babbage and the Analytical Engine."}
+    assert verify_search_case("ada_zh", observed)["passed"]
+    assert not verify_search_case("ada_zh", {**observed, "url": "https://example.org/wiki/Ada_Lovelace"})["passed"]
+    assert not verify_search_case("ada_zh", {**observed, "text": "Loading"})["passed"]

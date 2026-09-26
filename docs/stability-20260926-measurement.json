@@ -1,0 +1,1081 @@
+{
+  "initial_raw": [
+    {
+      "scenario": "bert_en",
+      "repetition": 1,
+      "passed": false,
+      "verified": false,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "actions": 9,
+      "elapsed_ms": 12229,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 82,
+            "total_tokens": 2254
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2601,
+            "completion_tokens": 107,
+            "total_tokens": 2708
+          }
+        }
+      ],
+      "wall_ms": 13564
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 1,
+      "passed": false,
+      "verified": false,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "actions": 9,
+      "elapsed_ms": 12794,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 119,
+            "total_tokens": 2295
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 155,
+            "total_tokens": 2759
+          }
+        }
+      ],
+      "wall_ms": 13006
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 5187,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 47,
+            "total_tokens": 1862
+          }
+        }
+      ],
+      "wall_ms": 5985
+    },
+    {
+      "scenario": "wikipedia",
+      "repetition": 1,
+      "passed": false,
+      "verified": false,
+      "status": "blocked",
+      "checks": {
+        "url": false,
+        "heading": false,
+        "body": true
+      },
+      "actions": 34,
+      "elapsed_ms": 24436,
+      "url": "https://en.wikipedia.org/w/index.php?search=G%C3%B6del%27s+incompleteness+theorems&title=Special%3ASearch&profile=advanced&fulltext=1&ns0=1",
+      "laya_calls": 8,
+      "planner_calls": 3,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 130,
+            "total_tokens": 1947
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2881,
+            "completion_tokens": 76,
+            "total_tokens": 2957
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 3283,
+            "completion_tokens": 61,
+            "total_tokens": 3344
+          }
+        }
+      ],
+      "wall_ms": 24918
+    },
+    {
+      "scenario": "bert_en",
+      "repetition": 2,
+      "passed": false,
+      "verified": false,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "actions": 9,
+      "elapsed_ms": 9838,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 47,
+            "total_tokens": 2219
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2599,
+            "completion_tokens": 111,
+            "total_tokens": 2710
+          }
+        }
+      ],
+      "wall_ms": 10136
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 2,
+      "passed": false,
+      "verified": false,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "actions": 9,
+      "elapsed_ms": 12724,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 122,
+            "total_tokens": 2298
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 121,
+            "total_tokens": 2725
+          }
+        }
+      ],
+      "wall_ms": 12940
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 4,
+      "elapsed_ms": 7289,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 129,
+            "total_tokens": 1944
+          }
+        }
+      ],
+      "wall_ms": 7637
+    },
+    {
+      "scenario": "wikipedia",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 5903,
+      "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 113,
+            "total_tokens": 1930
+          }
+        }
+      ],
+      "wall_ms": 6267
+    }
+  ],
+  "initial_rechecked_without_rerun": [
+    {
+      "scenario": "bert_en",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 12229,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 82,
+            "total_tokens": 2254
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2601,
+            "completion_tokens": 107,
+            "total_tokens": 2708
+          }
+        }
+      ],
+      "wall_ms": 13564,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "original_passed": false,
+      "source_trace": "artifacts/stability-20260926/bert_en-1/trace.json"
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 12794,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 119,
+            "total_tokens": 2295
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 155,
+            "total_tokens": 2759
+          }
+        }
+      ],
+      "wall_ms": 13006,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "original_passed": false,
+      "source_trace": "artifacts/stability-20260926/bert_zh-1/trace.json"
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 5187,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 47,
+            "total_tokens": 1862
+          }
+        }
+      ],
+      "wall_ms": 5985,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "original_passed": true,
+      "source_trace": "artifacts/stability-20260926/ada_zh-1/trace.json"
+    },
+    {
+      "scenario": "wikipedia",
+      "repetition": 1,
+      "passed": false,
+      "verified": false,
+      "status": "blocked",
+      "checks": {
+        "url": false,
+        "heading": false,
+        "body": true
+      },
+      "actions": 34,
+      "elapsed_ms": 24436,
+      "url": "https://en.wikipedia.org/w/index.php?search=G%C3%B6del%27s+incompleteness+theorems&title=Special%3ASearch&profile=advanced&fulltext=1&ns0=1",
+      "laya_calls": 8,
+      "planner_calls": 3,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 130,
+            "total_tokens": 1947
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2881,
+            "completion_tokens": 76,
+            "total_tokens": 2957
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 3283,
+            "completion_tokens": 61,
+            "total_tokens": 3344
+          }
+        }
+      ],
+      "wall_ms": 24918,
+      "original_checks": {
+        "url": false,
+        "heading": false,
+        "body": true
+      },
+      "original_passed": false,
+      "source_trace": "artifacts/stability-20260926/wikipedia-1/trace.json"
+    },
+    {
+      "scenario": "bert_en",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 9838,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 47,
+            "total_tokens": 2219
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2599,
+            "completion_tokens": 111,
+            "total_tokens": 2710
+          }
+        }
+      ],
+      "wall_ms": 10136,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "original_passed": false,
+      "source_trace": "artifacts/stability-20260926/bert_en-2/trace.json"
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 12724,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 122,
+            "total_tokens": 2298
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 121,
+            "total_tokens": 2725
+          }
+        }
+      ],
+      "wall_ms": 12940,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": false
+      },
+      "original_passed": false,
+      "source_trace": "artifacts/stability-20260926/bert_zh-2/trace.json"
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 4,
+      "elapsed_ms": 7289,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 129,
+            "total_tokens": 1944
+          }
+        }
+      ],
+      "wall_ms": 7637,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "original_passed": true,
+      "source_trace": "artifacts/stability-20260926/ada_zh-2/trace.json"
+    },
+    {
+      "scenario": "wikipedia",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 5903,
+      "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 113,
+            "total_tokens": 1930
+          }
+        }
+      ],
+      "wall_ms": 6267,
+      "original_checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "original_passed": true,
+      "source_trace": "artifacts/stability-20260926/wikipedia-2/trace.json"
+    }
+  ],
+  "final_repeated": [
+    {
+      "scenario": "wikipedia",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 4174,
+      "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 62,
+            "total_tokens": 1879
+          }
+        }
+      ],
+      "wall_ms": 5501
+    },
+    {
+      "scenario": "bert_en",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 10898,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 92,
+            "total_tokens": 2264
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2600,
+            "completion_tokens": 112,
+            "total_tokens": 2712
+          }
+        }
+      ],
+      "wall_ms": 11110
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 13811,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 114,
+            "total_tokens": 2290
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 121,
+            "total_tokens": 2725
+          }
+        }
+      ],
+      "wall_ms": 14035
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 3863,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 80,
+            "total_tokens": 1895
+          }
+        }
+      ],
+      "wall_ms": 4309
+    },
+    {
+      "scenario": "wikipedia",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 5017,
+      "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1817,
+            "completion_tokens": 120,
+            "total_tokens": 1937
+          }
+        }
+      ],
+      "wall_ms": 5411
+    },
+    {
+      "scenario": "bert_en",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 9240,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 48,
+            "total_tokens": 2220
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2600,
+            "completion_tokens": 103,
+            "total_tokens": 2703
+          }
+        }
+      ],
+      "wall_ms": 9433
+    },
+    {
+      "scenario": "bert_zh",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "authors": true,
+        "abstract": true
+      },
+      "actions": 9,
+      "elapsed_ms": 10740,
+      "url": "https://arxiv.org/abs/1810.04805",
+      "laya_calls": 2,
+      "planner_calls": 2,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2176,
+            "completion_tokens": 96,
+            "total_tokens": 2272
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2604,
+            "completion_tokens": 108,
+            "total_tokens": 2712
+          }
+        }
+      ],
+      "wall_ms": 10950
+    },
+    {
+      "scenario": "ada_zh",
+      "repetition": 2,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "actions": 3,
+      "elapsed_ms": 3540,
+      "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1815,
+            "completion_tokens": 47,
+            "total_tokens": 1862
+          }
+        }
+      ],
+      "wall_ms": 3917
+    }
+  ],
+  "pagination_contracts": [
+    {
+      "scenario": "normal",
+      "passed": true,
+      "status": "done",
+      "page_turns": 2,
+      "actions": 3,
+      "elapsed_ms": 255
+    },
+    {
+      "scenario": "delayed",
+      "passed": true,
+      "status": "done",
+      "page_turns": 2,
+      "actions": 9,
+      "elapsed_ms": 1885
+    },
+    {
+      "scenario": "cycle",
+      "passed": true,
+      "status": "blocked",
+      "page_turns": 2,
+      "actions": 4,
+      "elapsed_ms": 665
+    },
+    {
+      "scenario": "suggestion",
+      "passed": true,
+      "fills": 1,
+      "status": "done",
+      "page_turns": 0,
+      "actions": 2,
+      "elapsed_ms": 164
+    }
+  ],
+  "existing_fixtures": [
+    {
+      "scenario": "travel",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 499,
+      "laya_calls": 2,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "detail": true,
+          "destination": true,
+          "category": true,
+          "cancellation": true
+        }
+      }
+    },
+    {
+      "scenario": "research",
+      "verified": true,
+      "status": "done",
+      "actions": 1,
+      "elapsed_ms": 92,
+      "laya_calls": 1,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "article": true,
+          "body": true
+        }
+      }
+    },
+    {
+      "scenario": "zh",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 303,
+      "laya_calls": 2,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "from": true,
+          "to": true,
+          "date": true,
+          "trip": true,
+          "direct": true,
+          "results": true
+        },
+        "observed": {
+          "from": "杭州",
+          "to": "上海",
+          "date": "2026年10月20日",
+          "trip": "单程",
+          "direct": true,
+          "rows": [
+            "杭州 08:15 → 上海 10:02\n2026年10月20日 · 单程 · 直达 · G7312\n¥168",
+            "杭州 10:44 → 上海 12:31\n2026年10月20日 · 单程 · 直达 · G7546\n¥176",
+            "杭州 14:06 → 上海 15:58\n2026年10月20日 · 单程 · 直达 · G7398\n¥159"
+          ]
+        }
+      }
+    }
+  ],
+  "flights_initial_error": [
+    {
+      "scenario": "flights",
+      "repetition": 1,
+      "passed": false,
+      "verified": false,
+      "status": "error",
+      "error": "RuntimeError: Browser script failed: TypeError: Cannot read properties of undefined (reading 'contains')\n    at <anonymous>:81:38\n    at <anonymous>:166:3",
+      "planner_calls": 0,
+      "requests": [],
+      "wall_ms": 1606
+    }
+  ],
+  "flights_after_compatibility_fix": [
+    {
+      "scenario": "flights",
+      "repetition": 1,
+      "passed": true,
+      "verified": true,
+      "status": "done",
+      "checks": {
+        "search_page": true,
+        "one_way": true,
+        "origin": true,
+        "destination": true,
+        "adults": true,
+        "economy": true,
+        "date": true,
+        "year": true,
+        "results": true
+      },
+      "actions": 13,
+      "elapsed_ms": 13639,
+      "url": "https://www.google.com/travel/flights/search?tfs=CBwQAhojEgoyMDI2LTEwLTIwagcIARIDWlJIcgwIAxIIL20vMDRqcGxAAUgBcAGCAQsI____________AZgBAg&hl=en",
+      "laya_calls": 11,
+      "planner_calls": 1,
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1600,
+            "completion_tokens": 238,
+            "total_tokens": 1838
+          }
+        }
+      ],
+      "wall_ms": 16107
+    }
+  ],
+  "offline_tests": 156,
+  "api_calls_this_iteration": 27,
+  "reported_tokens_this_iteration": 63261,
+  "limits": {
+    "page_turns": 2,
+    "scroll_positions_per_page": 24,
+    "agent_actions": 60
+  }
+}

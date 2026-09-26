@@ -1,0 +1,337 @@
+{
+  "api_tasks": [
+    {
+      "scenario": "wikipedia",
+      "verified": true,
+      "status": "done",
+      "actions": 10,
+      "elapsed_ms": 13670,
+      "laya_calls": 9,
+      "planner_calls": 2,
+      "planner_ms": 6656,
+      "plan": {
+        "requirements": [
+          {
+            "what": "Search Wikipedia (search · search Input · Search Wikipedia)",
+            "value": "Gödel's incompleteness theorems"
+          }
+        ],
+        "open": "Gödel's incompleteness theorems",
+        "finish": "The Wikipedia article body about Gödel's incompleteness theorems is open."
+      },
+      "checks": {
+        "url": true,
+        "heading": true,
+        "body": true
+      },
+      "url": "https://en.wikipedia.org/wiki/G%C3%B6del%27s_incompleteness_theorems",
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1813,
+            "completion_tokens": 88,
+            "total_tokens": 1901
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2874,
+            "completion_tokens": 40,
+            "total_tokens": 2914
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "github",
+      "verified": true,
+      "status": "done",
+      "actions": 25,
+      "elapsed_ms": 23987,
+      "laya_calls": 4,
+      "planner_calls": 3,
+      "planner_ms": 15703,
+      "plan": {
+        "requirements": [],
+        "open": "browser-use/jev-ultrafast",
+        "finish": "The browser-use/jev-ultrafast repository page is open with its README visible.",
+        "navigate": "Repositories\n       57"
+      },
+      "checks": {
+        "url": true,
+        "repository": true,
+        "readme": true
+      },
+      "url": "https://github.com/browser-use/jev-ultrafast",
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1400,
+            "completion_tokens": 123,
+            "total_tokens": 1523
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1420,
+            "completion_tokens": 122,
+            "total_tokens": 1542
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1995,
+            "completion_tokens": 102,
+            "total_tokens": 2097
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "gutenberg",
+      "verified": true,
+      "status": "done",
+      "actions": 4,
+      "elapsed_ms": 9395,
+      "laya_calls": 2,
+      "planner_calls": 1,
+      "planner_ms": 7110,
+      "plan": {
+        "requirements": [
+          {
+            "what": "Search books (query · Quick search)",
+            "value": "Pride and Prejudice by Jane Austen"
+          }
+        ],
+        "open": "Pride and Prejudice",
+        "finish": "The Pride and Prejudice book details page is open, with Jane Austen shown as the author and reading or download options visible."
+      },
+      "checks": {
+        "url": true,
+        "title": true,
+        "author": true,
+        "formats": true
+      },
+      "url": "https://www.gutenberg.org/ebooks/42671",
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 1560,
+            "completion_tokens": 122,
+            "total_tokens": 1682
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "arxiv",
+      "verified": false,
+      "status": "ready",
+      "actions": 40,
+      "elapsed_ms": 27782,
+      "laya_calls": 22,
+      "planner_calls": 3,
+      "planner_ms": 14920,
+      "plan": {
+        "requirements": [
+          {
+            "what": "search query",
+            "value": "Attention Is All You Need"
+          }
+        ],
+        "open": "Attention Is All You Need",
+        "finish": "The paper’s abstract page is open, with its title, authors, and abstract visible."
+      },
+      "checks": {
+        "url": false,
+        "heading": false,
+        "authors": false,
+        "abstract": false
+      },
+      "url": "https://arxiv.org/abs/2307.16662",
+      "requests": [
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2159,
+            "completion_tokens": 51,
+            "total_tokens": 2210
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 2356,
+            "completion_tokens": 174,
+            "total_tokens": 2530
+          }
+        },
+        {
+          "requested_model": "cx/gpt-6-luna",
+          "returned_model": "gpt-6-luna",
+          "usage": {
+            "prompt_tokens": 3081,
+            "completion_tokens": 67,
+            "total_tokens": 3148
+          }
+        }
+      ]
+    }
+  ],
+  "saved_plan_regression": [
+    {
+      "scenario": "flights",
+      "verified": false,
+      "status": "blocked",
+      "actions": 24,
+      "elapsed_ms": 4708,
+      "laya_calls": 39,
+      "planner_calls": 0,
+      "verification": {
+        "passed": false,
+        "checks": {
+          "search_page": false,
+          "one_way": true,
+          "origin": true,
+          "destination": true,
+          "adults": false,
+          "economy": true,
+          "date": true,
+          "year": true,
+          "results": false
+        },
+        "visible_flights": []
+      }
+    },
+    {
+      "scenario": "wikipedia",
+      "verified": false,
+      "status": "blocked",
+      "actions": 1,
+      "elapsed_ms": 509,
+      "laya_calls": 6,
+      "planner_calls": 0,
+      "verification": {
+        "passed": false,
+        "checks": {
+          "article": false,
+          "body": false
+        }
+      }
+    },
+    {
+      "scenario": "travel",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 508,
+      "laya_calls": 2,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "detail": true,
+          "destination": true,
+          "category": true,
+          "cancellation": true
+        }
+      }
+    },
+    {
+      "scenario": "research",
+      "verified": true,
+      "status": "done",
+      "actions": 1,
+      "elapsed_ms": 95,
+      "laya_calls": 1,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "article": true,
+          "body": true
+        }
+      }
+    },
+    {
+      "scenario": "zh",
+      "verified": true,
+      "status": "done",
+      "actions": 6,
+      "elapsed_ms": 290,
+      "laya_calls": 2,
+      "planner_calls": 0,
+      "verification": {
+        "passed": true,
+        "checks": {
+          "from": true,
+          "to": true,
+          "date": true,
+          "trip": true,
+          "direct": true,
+          "results": true
+        },
+        "observed": {
+          "from": "杭州",
+          "to": "上海",
+          "date": "2026年10月20日",
+          "trip": "单程",
+          "direct": true,
+          "rows": [
+            "杭州 08:15 → 上海 10:02\n2026年10月20日 · 单程 · 直达 · G7312\n¥168",
+            "杭州 10:44 → 上海 12:31\n2026年10月20日 · 单程 · 直达 · G7546\n¥176",
+            "杭州 14:06 → 上海 15:58\n2026年10月20日 · 单程 · 直达 · G7398\n¥159"
+          ]
+        }
+      }
+    }
+  ],
+  "offline_tests": 130,
+  "scope": "single bounded observations, not a success-rate benchmark",
+  "api_iteration_calls_excluding_flights": 36,
+  "api_iteration_tokens_excluding_flights": 76333,
+  "flights_api_regression": {
+    "scenario": "flights",
+    "verified": true,
+    "status": "done",
+    "actions": 16,
+    "elapsed_ms": 20174,
+    "laya_calls": 16,
+    "planner_calls": 3,
+    "verification": {
+      "passed": true,
+      "checks": {
+        "search_page": true,
+        "one_way": true,
+        "origin": true,
+        "destination": true,
+        "adults": true,
+        "economy": true,
+        "date": true,
+        "year": true,
+        "results": true
+      },
+      "visible_flights": [
+        "From 426 Hong Kong dollars.This price does not include overhead bin access. Nonstop flight with easyJet. Leaves Zurich Airport at 11:10 AM on Tuesday, October 20 and arrives at London Gatwick Airport at 11:55 AM on Tuesday, October 20. Total duration 1 hr 45 min.   Select flight",
+        "From 682 Hong Kong dollars. Nonstop flight with British Airways. Leaves Zurich Airport at 4:25 PM on Tuesday, October 20 and arrives at Heathrow Airport at 5:10 PM on Tuesday, October 20. Total duration 1 hr 45 min.   Select flight",
+        "From 942 Hong Kong dollars.This price does not include overhead bin access. Nonstop flight with SWISS. Leaves Zurich Airport at 10:30 AM on Tuesday, October 20 and arrives at Heathrow Airport at 11:20 AM on Tuesday, October 20. Total duration 1 hr 50 min.   Select flight"
+      ]
+    }
+  },
+  "total_api_iteration_calls": 39,
+  "total_api_iteration_tokens": 84905
+}

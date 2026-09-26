@@ -219,10 +219,11 @@ def field_text(context):
     return value, meta
 
 
-def plan_goal(goal, fields=(), attempts=3, *, items=()):
-    """Once per task: the values the goal states, the item to open, and the visible finish condition.
+def plan_goal(goal, fields=(), attempts=3, *, items=(), controls=(), page=None, feedback=None):
+    """Plan against observed controls, optionally repairing a previous failed plan.
     `fields` are the observed field labels, so requirements can name the field that sets them. No site plan."""
     context = {"fields_on_page": list(fields)[:40], "items_on_page": list(items)[:40], "goal": goal}
+    context.update(controls=list(controls)[:60], page=page or {}, feedback=feedback)
     started = time.perf_counter()
     responses = []
     for attempt in range(attempts):
@@ -237,6 +238,16 @@ def plan_goal(goal, fields=(), attempts=3, *, items=()):
                 r["value"].casefold() == plan["open"].casefold() for r in plan["requirements"]
             ):
                 raise ValueError("No form fields are visible. Put the item only in open; requirements is [].")
+            names = [r["what"].casefold() for r in plan["requirements"]]
+            if len(names) != len(set(names)):
+                raise ValueError("Each field may appear only once; combine search terms into one requirement.")
+            navigation = output.get("navigate")
+            if navigation:
+                if not isinstance(navigation, str) or navigation not in items:
+                    raise ValueError("navigate must exactly name an observed link or button in items_on_page.")
+                if plan["requirements"]:
+                    raise ValueError("For navigation, requirements must be empty; plan fields after navigation.")
+                plan["navigate"] = navigation
             item = plan["open"]
             if item in items:
                 title = re.sub(r"^(?:view|read|open)\s+", "", item, flags=re.IGNORECASE)
@@ -266,6 +277,16 @@ def parse_plan(output, meta):
             {"what": r["what"].strip(), "value": r["value"].strip()}
             for r in raw
         ]
+        identities = {}
+        for key in ("identity_terms", "authors"):
+            terms = output.get(key, [])
+            if not isinstance(terms, list) or len(terms) > 8 or any(
+                not isinstance(t, str) or not t.strip() or len(t) > 160
+                or not any(c.isalnum() for c in t) for t in terms
+            ):
+                raise ValueError()
+            if terms:
+                identities[key] = list(dict.fromkeys(t.strip() for t in terms))
         finish, item = output["finish"], output.get("open")
         if not isinstance(finish, str) or not finish.strip() or len(requirements) > 12:
             raise ValueError()
@@ -284,4 +305,8 @@ def parse_plan(output, meta):
             item = None
     except (ValueError, KeyError, TypeError, AttributeError):
         raise ValueError("Goal planner returned no valid plan; no action executed.") from None
-    return {"requirements": requirements, "open": item, "finish": finish.strip()}, meta
+    plan = {"requirements": requirements, "open": item, "finish": finish.strip()}
+    if identities and item is None:
+        raise ValueError("Item identity conditions require an item to open.")
+    plan.update(identities)
+    return plan, meta
