@@ -4,7 +4,7 @@
 <main></main><div role="link" tabindex="0">Footer help</div>
 <script>
 const args=new URLSearchParams(location.search);
-const mode=['normal','delayed','cycle','suggestion','missing','namesake','wrong_author','mention','misleading_detail','inverted','author_collision','initials'].includes(args.get('mode')) ? args.get('mode') : 'normal';
+const mode=['normal','delayed','cycle','suggestion','missing','namesake','wrong_author','mention','misleading_detail','inverted','author_collision','initials','paywall','login','boilerplate','article_on_paywalls','delayed_body'].includes(args.get('mode')) ? args.get('mode') : 'normal';
 const main=document.querySelector('main');
 function render(number) {
   const desired=number===3 && mode!=='missing' ? 'Memory Without Leaks' : `Different article ${number}`;
@@ -17,7 +17,15 @@ function render(number) {
     if(mode==='delayed') link.addEventListener('click',event=>{event.preventDefault();setTimeout(()=>render(next),600)});
   }
 }
-if(args.has('article')) {
+if(['paywall','login','boilerplate','article_on_paywalls','delayed_body'].includes(mode)) {
+  document.title='Memory Without Leaks';
+  main.innerHTML='<h1>Memory Without Leaks</h1>';
+  if(mode==='delayed_body') setTimeout(()=>{main.innerHTML+='<p>This demonstration article explains how retained references prevent garbage collection. Release subscriptions and remove unused event listeners when their owners are destroyed. Verify the object lifecycle with repeated creation and cleanup.</p>'},600);
+  if(mode==='paywall') main.innerHTML+='<p>Subscribe to access this article. Create your account and choose a membership plan to continue reading. Terms and conditions apply.</p><button>Subscribe</button>';
+  if(mode==='login') main.innerHTML+='<p>请先登录后继续阅读完整文章。登录账户后即可查看正文，您还可以选择注册账户，或者了解会员服务以及相关条款。</p><button>登录</button>';
+  if(mode==='boilerplate') main.innerHTML+='<nav>'+('Home About Privacy Terms Contact. '.repeat(8))+'</nav>';
+  if(mode==='article_on_paywalls') main.innerHTML+='<p>This article studies subscription systems and their effects on access to knowledge. It compares several publishing models and describes their limitations. A subscription can support journalism, while also limiting access for readers.</p>';
+} else if(args.has('article')) {
   document.title='Memory Without Leaks';
   main.innerHTML='<h1>Memory Without Leaks</h1><p>Author: Example Researcher</p><p>This demonstration article explains how retained references prevent garbage collection. Release subscriptions and remove unused event listeners when their owners are destroyed. Verify the object lifecycle with repeated creation and cleanup rather than relying on one memory measurement.</p>';
   if(args.get('article')==='mention') main.innerHTML+='<p>This article discusses work by Desired Researcher, who did not write this article.</p>';

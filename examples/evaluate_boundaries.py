@@ -17,7 +17,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     cases = ['missing', 'namesake', 'wrong_author', 'mention', 'misleading_detail',
-             'inverted', 'author_collision', 'initials', 'gutenberg']
+             'inverted', 'author_collision', 'initials', 'gutenberg',
+             'paywall', 'login', 'boilerplate', 'article_on_paywalls', 'delayed_body']
     parser.add_argument('--cases', nargs='+', choices=cases, default=cases)
     parser.add_argument('--base-url', help='Opt in to live planning on a loopback API')
     parser.add_argument('--model')
@@ -66,6 +67,9 @@ def run(args):
                            'inverted', 'author_collision', 'initials'}
             goal = f'Open {item}' + (' by Desired Researcher.' if author_task else '.')
             plan = {'requirements': [], 'open': item, 'finish': 'The requested item detail page is visible.'}
+            if name in {'paywall', 'login', 'boilerplate', 'article_on_paywalls', 'delayed_body'}:
+                goal += ' Read the article body.'
+                plan['finish'] = 'The article body is visible.'
             if author_task:
                 plan['authors'] = ['Desired Researcher']
             agent, state = None, None
@@ -106,6 +110,15 @@ def run(args):
                 if live:
                     checks = {'detail_url': observed['url'].rstrip('/') == 'https://www.gutenberg.org/ebooks/19002',
                               'author': 'Lewis Carroll' in observed['text'], 'paginated': turns >= 1}
+                    passed = state['status'] == 'done' and all(checks.values())
+                elif name in {'paywall', 'login', 'boilerplate'}:
+                    checks = {'no_false_success': state['status'] == 'blocked'}
+                    passed = all(checks.values())
+                elif name == 'delayed_body':
+                    checks = {'body': 'retained references' in observed['text']}
+                    passed = state['status'] == 'done' and all(checks.values())
+                elif name == 'article_on_paywalls':
+                    checks = {'body': 'publishing models' in observed['text']}
                     passed = state['status'] == 'done' and all(checks.values())
                 elif name == 'inverted':
                     checks = {'detail': 'article=inverted' in observed['url'],

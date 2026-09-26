@@ -1130,3 +1130,144 @@ def test_conflicting_author_returns_to_results_without_reopening(fake):
 ])
 def test_author_names_preserve_boundaries(requested, value, individual, expected):
     assert laya.author_matches(requested, {'value': value, 'individual': individual}) is expected
+
+
+def test_subscription_prompt_does_not_prove_article_body(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'The article body is visible.'})
+    current = page([], title='Shared Title', text='Subscribe to access this article. Create your account and '
+                   'choose a membership plan to continue reading. Terms and conditions apply.')
+    current['headings'] = ['Shared Title']
+    assert p.choose(current, [])['operation'] == 'BLOCKED'
+
+
+def test_article_about_subscriptions_is_not_a_paywall(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'The article body is visible.'})
+    current = page([], title='Shared Title', text='This article studies subscription systems and their effects on '
+                   'access to knowledge. It compares several publishing models and describes their limitations.')
+    current['headings'] = ['Shared Title']
+    assert p.choose(current, [])['operation'] == 'DONE'
+
+
+def test_navigation_text_is_not_article_body(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'The article body is visible.'})
+    current = page([], title='Shared Title', text='Navigation and footer links ' * 12)
+    current.update(headings=['Shared Title'], content_text='')
+    assert p.choose(current, [])['operation'] != 'DONE'
+
+
+@pytest.mark.parametrize('replacement', [[], [{'what': 'Language', 'value': 'French'}]])
+def test_repair_cannot_remove_or_change_required_language(fake, monkeypatch, replacement):
+    original = {'requirements': [{'what': 'Language', 'value': 'English'}],
+                'open': 'Shared Title', 'finish': 'Read the English article body.'}
+    p = policy(original)
+    p.initial_plan = dict(original)
+    monkeypatch.setattr(laya, 'plan_goal', lambda *_a, **_k: (
+        {'requirements': replacement, 'open': 'Shared Title', 'finish': 'Open.'}, {}))
+    p.make_plan(page([]), [], reason='No progress')
+    assert p.plan['requirements'] == original['requirements']
+    assert p.plan['finish'] == original['finish']
+    assert p.repair_violation
+
+
+def test_repair_can_remap_field_without_changing_its_value(fake, monkeypatch):
+    original = {'requirements': [{'what': 'Language', 'value': 'English'}],
+                'open': 'Shared Title', 'finish': 'Read the English article body.'}
+    p = policy(original)
+    p.initial_plan = dict(original)
+    monkeypatch.setattr(laya, 'plan_goal', lambda *_a, **_k: (
+        {'requirements': [{'what': 'Article language', 'value': 'English'}],
+         'open': 'Shared Title', 'finish': 'Open.'}, {}))
+    p.make_plan(page([]), [], reason='No progress')
+    assert p.plan['requirements'][0]['what'] == 'Article language'
+    assert p.plan['finish'] == original['finish']
+    assert not p.repair_violation
+
+
+def test_rejected_repairs_exhaust_budget_without_executing_weakened_plan(fake, monkeypatch):
+    original = {'requirements': [{'what': 'Language', 'value': 'English'}],
+                'open': 'Shared Title', 'finish': 'The English body is visible.'}
+    p = policy(original)
+    p.initial_plan = dict(original)
+    p.repair_reason = 'No progress'
+    planner = Mock(return_value=({'requirements': [], 'open': 'Shared Title', 'finish': 'Open.'}, {}))
+    monkeypatch.setattr(laya, 'plan_goal', planner)
+    current = page([], title='Shared Title', text='A different language article body. ' * 8)
+    history = []
+    first = p.choose(current, history)
+    assert first['operation'] == 'WAIT'
+    executed(history, first)
+    second = p.choose(current, history)
+    assert second['operation'] == 'BLOCKED'
+    assert p.plan['requirements'] == original['requirements']
+    assert planner.call_count == 2 and p.repairs == 2
+    assert all(e['accepted'] is False for e in p.planning_events)
+    assert 'Language' in second['stop_reason']
+
+
+def test_query_refinement_is_allowed_but_search_category_is_preserved():
+    original = {'requirements': [{'what': 'Search', 'value': 'Paper'},
+                                {'what': 'Search category', 'value': 'English'}], 'open': 'Paper'}
+    repaired = {'requirements': [{'what': 'Search', 'value': '"Paper"'},
+                                {'what': 'Search category', 'value': 'English'}], 'open': 'Paper'}
+    assert not laya.repair_violations(original, repaired)
+    repaired['requirements'].pop()
+    assert laya.repair_violations(original, repaired)
+
+
+def test_repair_cannot_swap_route_or_remove_target():
+    original = {'requirements': [{'what': 'From', 'value': 'Zurich'}, {'what': 'To', 'value': 'London'}],
+                'open': 'Paper'}
+    swapped = {'requirements': [{'what': 'From', 'value': 'London'}, {'what': 'To', 'value': 'Zurich'}],
+               'open': 'Paper'}
+    assert len(laya.repair_violations(original, swapped)) == 2
+    assert laya.repair_violations(original, {**original, 'open': None})
+
+
+def test_paywall_stops_without_repair_requests(fake, monkeypatch):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'Read the body.'})
+    p.initial_plan = dict(p.plan)
+    planner = Mock(side_effect=AssertionError('No paywall repair'))
+    monkeypatch.setattr(laya, 'plan_goal', planner)
+    current = page([], title='Shared Title', text='Subscribe to read this article. ' * 6)
+    d = p.choose(current, [])
+    assert d['operation'] == 'BLOCKED' and 'subscription' in d['stop_reason']
+    assert not p.repair_reason and not planner.called
+
+
+@pytest.mark.parametrize('text,blocked', [
+    ('Please sign in to continue reading this article.', True),
+    ('请先登录后继续阅读完整文章。', True),
+    ('Subscribe to our weekly newsletter.', False),
+    ('This article explains why sites ask readers to sign in to read.', False),
+])
+def test_access_barrier_requires_explicit_access_instruction(text, blocked):
+    assert bool(laya.access_barrier({'text': text})) is blocked
+
+
+def test_missing_body_exhausts_one_wait_budget_without_replanning(fake, monkeypatch):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'Read the body.'})
+    p.initial_plan = dict(p.plan)
+    current = page([], title='Shared Title', text='Navigation text ' * 12)
+    current.update(headings=['Shared Title'], content_text='')
+    history = []
+    planner = Mock(side_effect=AssertionError('Missing body must not restart planning'))
+    monkeypatch.setattr(laya, 'plan_goal', planner)
+    for _ in range(laya.MAX_RESULT_WAITS + 1):
+        d = p.choose(current, history)
+        if d['operation'] == 'BLOCKED':
+            break
+        assert d['operation'] == 'WAIT'
+        executed(history, d)
+    assert d['operation'] == 'BLOCKED'
+    assert len(history) == laya.MAX_RESULT_WAITS and not planner.called
+    assert 'body' in d['stop_reason']
+
+
+def test_body_arriving_within_wait_budget_can_finish(fake):
+    p = policy({'requirements': [], 'open': 'Shared Title', 'finish': 'Read the body.'})
+    current = page([], title='Shared Title', text='Loading')
+    current.update(headings=['Shared Title'], content_text='')
+    history = []
+    executed(history, p.choose(current, history))
+    current['content_text'] = 'A readable article paragraph with evidence. ' * 4
+    assert p.choose(current, history)['operation'] == 'DONE'

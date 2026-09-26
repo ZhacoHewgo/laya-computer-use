@@ -24,9 +24,11 @@ jev-ultrafast asks [TypeSafe's Jev](https://docs.typesafe.ai/introduction), a ho
   Every target is still an element the agent observed on the page, and there are no site-specific plans.
 - **Hosted mode still works.** Set `DECISION_MODEL=typesafe` to use the original Jev policy unchanged.
 
-See [姓名边界与倒序验收](docs/name-order-20260926.md) for the latest evaluation; [作者归属验收](docs/authorship-20260926.md) records the preceding iteration; [翻页与同名条目验收](docs/boundaries-20260926.md) records the preceding iteration; [重复测试与分页验证](docs/stability-20260926.md) records the previous iteration; [搜索结果关联验收](docs/result-cards-20260926.md) records the preceding iteration; [此前修复记录](docs/browser-repair-20260926.md) preserves earlier failures.
+See [配置、等待与自动检查](docs/onboarding-20260927.md) for the latest evaluation; [正文与修复条件验收](docs/content-repair-20260927.md) records the preceding iteration; [姓名边界与倒序验收](docs/name-order-20260926.md) records the preceding iteration; [作者归属验收](docs/authorship-20260926.md) records the preceding iteration; [翻页与同名条目验收](docs/boundaries-20260926.md) records the preceding iteration; [重复测试与分页验证](docs/stability-20260926.md) records the previous iteration; [搜索结果关联验收](docs/result-cards-20260926.md) records the preceding iteration; [此前修复记录](docs/browser-repair-20260926.md) preserves earlier failures.
 
 ## Improvements in this repository
+
+- **Completion and repair guards:** body-reading goals require observed content paragraphs; explicit login/subscription access prompts stop the run. Repairs cannot silently drop accepted non-query field values or change the target. Rejected repairs preserve the accepted plan and consume the bounded repair budget. Initial omissions and nonstandard page structures remain limitations.
 
 - **Explicit item identity:** optional `authors` constraints require author-labelled evidence on the candidate card and detail page; incidental body mentions do not count. Conflicting detail pages can be rejected and backtracked. Person boundaries are preserved, and explicit single-person fields support surname-first formatting; initials are not guessed. Other `identity_terms` remain literal phrase checks. Sparse metadata, aliases and inaccurate site labels remain limitations.
 
@@ -97,11 +99,16 @@ Chrome connects through [Browser Harness](https://github.com/browser-use/browser
 
 ## Configuration
 
+The inspector reads `.env` in the current directory. Quoted values, whitespace, comments and `export`
+are supported. Existing environment variables take precedence; `${...}` values stay literal.
+Browser configuration is loaded before importing the browser harness. A localhost gateway may still
+forward requests to a paid cloud model; it does not by itself establish offline or free inference.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DECISION_MODEL` | `laya` | `laya` for local decisions, `typesafe` for the original hosted Jev policy |
 | `LAYA_MODEL` | `aac6fef/laya-typed-decisions-mlx` | Laya checkpoint, from the Hub or a local path |
-| `TEXT_MODEL_BASE_URL` | `https://openrouter.ai/api/v1` | Any OpenAI-compatible endpoint. `localhost` endpoints need no key |
+| `TEXT_MODEL_BASE_URL` | `https://openrouter.ai/api/v1` | Any OpenAI-compatible endpoint. Local services may also require authentication |
 | `TEXT_MODEL` | `inception/mercury-2.5` | Model for initial planning and bounded repair |
 | `TEXT_MODEL_API_KEY` | — | Required for remote endpoints |
 | `TEXT_MODEL_REASONING` | `none` | Turns reasoning off for faster planning |
@@ -145,7 +152,7 @@ For this fork's Apple M4 + local Qwen + multilingual Laya results, see [Qwen 规
 
 The newer [搜索等待与滚动修复](docs/search-results-fix-20260926.md) uses saved plans supplied by GPT in a Codex conversation, with zero text-model API calls during execution. Python Docs and three local scenarios passed; Wikipedia and Google Flights still failed. This is a supplied-plan execution comparison, not an automatic GPT API integration or a general success-rate benchmark.
 
-The latest [航班弹窗与字段匹配修复](docs/flight-dialog-fix-20260926.md) passed Google Flights with the same saved plan: 6.631 seconds, 11 local Laya calls, and nine independent outcome checks. Python Docs and the three local scenarios also passed; Wikipedia still failed. Planning time is excluded, and these are fixed development tasks, not a general reliability benchmark.
+The earlier [航班弹窗与字段匹配修复](docs/flight-dialog-fix-20260926.md) passed Google Flights with the same saved plan: 6.631 seconds, 11 local Laya calls, and nine independent outcome checks. Python Docs and the three local scenarios also passed; Wikipedia still failed. Planning time is excluded, and these are fixed development tasks, not a general reliability benchmark.
 
 The following numbers are retained from [ipenywis/laya-ultrafast](https://github.com/ipenywis/laya-ultrafast). They report an M1 Max with `inception/mercury-2.5` on OpenRouter. They do not measure this fork's Qwen or multilingual configuration:
 
@@ -168,13 +175,21 @@ This is a small set of repeated tasks, not a general reliability benchmark. The 
 
 ## Everything else
 
-The action space, DOM snapshot, executor, freshness and occlusion checks, the inspector, and the performance work all come from jev-ultrafast. **See [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)** for how they work, the design notes, and the original evidence. The files in [`docs/`](docs/) are the original project's records and describe the hosted Jev runs.
+The action space, DOM snapshot, executor, freshness and occlusion checks, the inspector, and the performance work all come from jev-ultrafast. **See [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)** for how they work, the design notes, and the original evidence. The files in [`docs/`](docs/) include both upstream records and this fork's dated evaluations; check each report's model and verification scope.
 
-Development checks are the same as upstream:
+### Automated checks
+
+`.github/workflows/checks.yml` runs offline tests, lint, JavaScript syntax checks, a build and packaged
+asset checks on main pushes and pull requests. Tests block outbound socket connections and use mocked
+models. The Linux job intentionally omits the Apple-only Laya runtime: it validates Python policy and
+packaging, not real MLX inference or live browser reliability. Live evaluations remain separate.
+The workflow takes effect after these changes are pushed; local validation is not a GitHub Actions run.
+
+Development checks:
 
 ```bash
-uv run ruff check .
-uv run pytest            # offline: a fake stands in for Laya; no downloads or paid calls
+uv run --extra local ruff check .
+uv run --extra local pytest            # offline: a fake stands in for Laya; no downloads or paid calls
 node --check laya_ultrafast/static/app.js
 node --check laya_ultrafast/snapshot.js
 uv build

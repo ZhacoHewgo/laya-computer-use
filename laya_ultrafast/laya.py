@@ -83,6 +83,38 @@ def fold(text):
     return re.sub(r"\s+", " ", "".join(result)).strip()
 
 
+def access_barrier(page):
+    """Recognize explicit access instructions, not incidental discussion of subscriptions."""
+    prompts = page.get("access_prompts", page.get("main_text", page["text"]).splitlines())
+    pattern = (r"^(?:(?:please\s+)?(?:subscribe|sign in|log in|register|purchase|buy a subscription)"
+               r"\b.{0,90}\b(?:to|before you can)\s+(?:continue\s+)?(?:read|reading|access|view|unlock)\b"
+               r"|(?:to|in order to)\s+(?:continue\s+)?(?:read|access|view)\b.{0,90}"
+               r"\b(?:subscribe|sign in|log in|register)\b"
+               r"|(?:请先?|您需要|需要)?(?:登录|登入|订阅|购买会员|开通会员).{0,30}(?:阅读|查看|访问|解锁|继续))")
+    return next((text for text in prompts if re.search(pattern, text.strip(), re.I)), None)
+
+
+def repair_violations(previous, proposed):
+    """Keep accepted non-query values, permitting unambiguous field-label remapping."""
+    errors, used = [], set()
+    requirements = proposed["requirements"]
+    for old in previous["requirements"]:
+        query_label = fold(old["what"]) in {"search", "search query", "search terms", "query", "搜索", "查询", "搜索词"}
+        item_query = is_search_label(old["what"]) and fold(old["value"]) == fold(previous.get("open") or "")
+        if query_label or item_query:
+            continue  # Search wording is an operation; the item and its conditions remain protected.
+        named = [i for i, r in enumerate(requirements) if fold(r["what"]) == fold(old["what"])]
+        candidates = named or [i for i, r in enumerate(requirements) if fold(r["value"]) == fold(old["value"])]
+        if (len(candidates) != 1 or candidates[0] in used
+                or fold(requirements[candidates[0]]["value"]) != fold(old["value"])):
+            errors.append(f"Missing or changed condition: {old['what']} = {old['value']}")
+        else:
+            used.add(candidates[0])
+    if fold(previous.get("open") or "") != fold(proposed.get("open") or ""):
+        errors.append("The requested item must not be changed or removed during repair.")
+    return errors
+
+
 def author_matches(requested, entry):
     """Preserve person boundaries; reorder only metadata explicitly describing one person.
 
@@ -333,6 +365,8 @@ class LayaPolicy:
         self.planning_events = []
         self.repairs = 0
         self.repair_reason = None
+        self.repair_violation = []
+        self.terminal_reason = None
         self.rejected_urls = set()
         self.backtracks = 0
         self.returning_from = None
@@ -451,14 +485,22 @@ class LayaPolicy:
                                     "results": [{"title": e["result_title"], "href": e["href"],
                                                  "context": e["result_context"]}
                                                 for e in elements if e.get("result_title")][:10]},
-                              feedback={"reason": reason, "history": list(history)[-8:]} if reason else None)
+                              feedback={"reason": reason, "history": list(history)[-8:],
+                                        "accepted_plan": deepcopy(self.plan)} if reason else None)
+        self.repair_violation = []
         if reason:
+            self.repairs += 1
+            self.repair_violation = repair_violations(self.plan, plan)
+            if self.repair_violation:
+                self.planning_events.append({**meta, "field": "rejected goal repair", "value": deepcopy(plan),
+                                             "reason": self.repair_violation, "accepted": False})
+                return
+            plan["finish"] = (self.initial_plan or self.plan)["finish"]
             # A repair must not silently drop identity conditions from the accepted initial plan.
             for key in ("identity_terms", "authors"):
-                retained = (self.initial_plan or {}).get(key, [])
+                retained = list(dict.fromkeys((self.initial_plan or {}).get(key, []) + self.plan.get(key, [])))
                 if retained:
                     plan[key] = list(dict.fromkeys(retained + plan.get(key, [])))
-            self.repairs += 1
             # Re-map from the current page. Never replay a previous mutation or erase action history.
             self.fields.clear()
             self.met.clear()
@@ -486,9 +528,14 @@ class LayaPolicy:
         self.repair_reason = None
         self.answers, self.questions, self.tokens = {}, {}, 0
         self.model_calls = 0
-        op, element, action, picked, kind, req, text = self.decide(page, elements)
-        if op == "BLOCKED" and self.repairs < 2 and self.initial_plan is not None:
-            self.repair_reason = f"No executable progress. Requirement index: {req}; current plan: {self.plan}"
+        if self.repair_violation:
+            result = ("BLOCKED", None, None, None, "blocked", None, None)
+        else:
+            result = self.decide(page, elements)
+        op, element, action, picked, kind, req, text = result
+        if op == "BLOCKED" and not self.terminal_reason and self.repairs < 2 and self.initial_plan is not None:
+            self.repair_reason = str(self.repair_violation) if self.repair_violation else (
+                f"No executable progress. Requirement index: {req}; current plan: {self.plan}")
             op, kind = "WAIT", "wait"
         answer = picked[1] if picked else None
         indices = {str(e["node"]): e["index"] for e in elements}
@@ -527,6 +574,7 @@ class LayaPolicy:
             "usage": {"input_tokens": self.tokens, "output_tokens": 0, "model_calls": self.model_calls},
             "latency_ms": round((time.perf_counter() - started) * 1000),
             "request": {"plan": deepcopy(self.plan), "questions": self.questions},
+            "stop_reason": self.terminal_reason or ("; ".join(self.repair_violation) or None),
         }
 
     @staticmethod
@@ -536,6 +584,10 @@ class LayaPolicy:
 
     def decide(self, page, elements):
         """Return (operation, element, action, (element, answer) or None, step kind, requirement, text)."""
+        barrier = access_barrier(page)
+        if barrier:
+            self.terminal_reason = "Content access requires login or subscription: " + barrier[:180]
+            return "BLOCKED", None, None, None, "blocked", None, None
         reqs = self.plan["requirements"]
         by_node = {e["node"]: e for e in elements}
         clickable = [e for e in elements if "click" in e["actions"] and self.failed.get(e["node"], 0) < 2]
@@ -743,6 +795,9 @@ class LayaPolicy:
             headings = page.get("headings", [])
             identity = titled(page["title"], item) or bool(chosen)
             body = page.get("main_text", page["text"])
+            needs_body = bool(re.search(r"\b(?:body|abstract|full text)\b|正文|摘要|全文",
+                                        self.goal + " " + self.plan["finish"], re.I))
+            readable = page.get("content_text", body) if needs_body else body
             heading_name = opened["label"] if chosen else item.rsplit("/", 1)[-1]
             def same_heading(h):
                 title = fold(re.sub(r"^(?:title|标题)\s*[:：]\s*", "", h, flags=re.I))
@@ -759,7 +814,7 @@ class LayaPolicy:
             search_route = "search" in path.split("/")
             result_listing = bool(re.search(r"displaying results \d|showing \d+.*results", page["text"], re.I))
             if (identity and heading_matches and matches_identity(body) and matches_authors(page.get("authors", []))
-                    and len(body.strip()) >= 80
+                    and len(readable.strip()) >= 80
                     and not (search_route or result_listing)):
                 return "DONE", None, None, None, "done", None, None
             wrong_author = bool(authors and page.get("authors") and not matches_authors(page["authors"]))
@@ -770,6 +825,10 @@ class LayaPolicy:
                     self.rejected_urls.add(page["url"])
                     return "BACK", None, back, None, "back", None, None
             if wrong_author and identity and not (search_route or result_listing):
+                return "BLOCKED", None, None, None, "blocked", None, None
+            if (identity and heading_matches and needs_body and len(readable.strip()) < 80
+                    and not (search_route or result_listing) and self.waits >= MAX_RESULT_WAITS):
+                self.terminal_reason = "No readable article body after the bounded loading wait."
                 return "BLOCKED", None, None, None, "blocked", None, None
             if identity and not (search_route or result_listing):
                 op = "WAIT" if self.waits < MAX_RESULT_WAITS else "BLOCKED"

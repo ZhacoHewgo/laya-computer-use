@@ -199,7 +199,16 @@
   const headings=[...document.querySelectorAll('h1')].filter(visible).map(e=>e.innerText.trim()).filter(Boolean);
   const main=document.querySelector('main,[role="main"],article');
   const main_text=main && visible(main) ? main.innerText.slice(0,12000) : text;
+  const contentRoot=main && visible(main) ? main : document.body;
+  const contentNodes=[...contentRoot.querySelectorAll('p,blockquote,[itemprop="articleBody"]')]
+    .filter(e=>visible(e) && !e.closest('nav,aside,footer,header,form,[role="dialog"]') &&
+      !e.matches('[class~="author"],[class~="authors"],[class~="byline"]'));
+  const content_text=contentNodes.filter(e=>!contentNodes.some(other=>other!==e && other.contains(e)))
+    .map(e=>e.innerText.trim()).filter(Boolean).join('\n').slice(0,12000);
+  const access_prompts=[...contentRoot.querySelectorAll('p,h1,h2,h3,h4,[role="alert"]'),
+    ...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')]
+    .filter(visible).map(e=>e.innerText.trim()).filter(t=>t && t.length<=500).slice(0,100);
   const authors=authorEvidence(main && visible(main) ? main : document.body);
-  return {authors,url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,headings,main_text,
+  return {authors,content_text,access_prompts,url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,headings,main_text,
     scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};
 })()

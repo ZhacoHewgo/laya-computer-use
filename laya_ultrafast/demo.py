@@ -9,7 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .agent import Agent
+from dotenv import load_dotenv
+
 from .laya import DEFAULT_MODEL
 from .questions import MAX_STEPS
 
@@ -32,12 +33,7 @@ AGENT = None
 
 
 def load_environment():
-    path = Path.cwd() / ".env"
-    if path.exists():
-        for line in path.read_text().splitlines():
-            if "=" in line and not line.startswith("#"):
-                key, value = line.split("=", 1)
-                os.environ.setdefault(key, value)
+    load_dotenv(Path.cwd() / ".env", override=False, interpolate=False, encoding="utf-8-sig")
 
 
 def response_state():
@@ -65,6 +61,8 @@ def close_browser():
 def command(name, body):
     global AGENT
     if name == "reset":
+        from .agent import Agent  # Import the browser harness after environment loading.
+
         scenario = body.get("scenario", "flights")
         if scenario not in {*FIXTURES, *WEB}:
             raise ValueError("Unknown demo scenario")

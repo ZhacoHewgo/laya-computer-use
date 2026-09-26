@@ -9,6 +9,7 @@ dependencies = [
     "browser-harness==0.1.13",
     "httpx[http2]>=0.28,<1",
     "laya-mlx>=0.2,<0.3",
+    "python-dotenv>=1.2,<2",
 ]
 
 [project.scripts]

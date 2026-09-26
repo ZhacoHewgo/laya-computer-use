@@ -99,3 +99,10 @@ requested item, not people mentioned in its text. Always put requested author na
 in finish or identity_terms. Do not infer authors from the page if the user did not request them.
 Author constraints require visible author-labelled metadata or a byline in both result and detail page.
 """
+
+GOAL_PLAN += """
+On repair, feedback.accepted_plan is the last accepted plan. Preserve all non-search requirement values
+and the requested item. Field labels may be remapped to new observed controls; search wording may be
+refined. Do not silently remove a filter, language, date, location or other accepted condition when it
+is hard to satisfy. The original finish condition and identity conditions still apply after repair.
+"""
